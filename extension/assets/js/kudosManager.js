@@ -496,7 +496,6 @@ function giveKudosByIcon() {
         if (kudosButton) {
             // ...vérifications éventuelles pour ignorer ses propres activités...
             kudosButton.click();
-            KudosManager.handleSuccessfulKudos(`icon-${Math.random()}`, kudosButton);
         }
     });
 }
