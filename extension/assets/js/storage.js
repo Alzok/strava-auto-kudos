@@ -1,9 +1,11 @@
 /**
- * Module pour le stockage local
+ * Module pour la gestion du stockage local
  */
+console.log("[Strava Auto Kudos] Storage module loading");
+
 const Storage = {
     /**
-     * Enregistre une valeur dans le stockage local
+     * Sauvegarde une valeur dans le stockage local
      * @param {string} key - Clé de stockage
      * @param {any} value - Valeur à stocker
      */
@@ -11,26 +13,45 @@ const Storage = {
         try {
             localStorage.setItem(key, JSON.stringify(value));
         } catch (error) {
-            Logger.error("Erreur lors de l'enregistrement dans le stockage local", error);
+            console.error('[Strava Auto Kudos] Error saving to storage:', error);
         }
     },
     
     /**
      * Charge une valeur depuis le stockage local
      * @param {string} key - Clé de stockage
-     * @param {any} defaultValue - Valeur par défaut si non trouvé
-     * @returns {any} - Valeur stockée ou valeur par défaut
+     * @param {any} defaultValue - Valeur par défaut si la clé n'existe pas
+     * @returns {any} - La valeur stockée ou la valeur par défaut
      */
-    load: (key, defaultValue = null) => {
+    load: (key, defaultValue) => {
         try {
-            const value = localStorage.getItem(key);
-            return value !== null ? JSON.parse(value) : defaultValue;
+            const item = localStorage.getItem(key);
+            return item !== null ? JSON.parse(item) : defaultValue;
         } catch (error) {
-            Logger.error("Erreur lors du chargement depuis le stockage local", error);
+            console.error('[Strava Auto Kudos] Error loading from storage:', error);
             return defaultValue;
+        }
+    },
+    
+    /**
+     * Supprime une valeur du stockage local
+     * @param {string} key - Clé à supprimer
+     */
+    remove: (key) => {
+        try {
+            localStorage.removeItem(key);
+        } catch (error) {
+            console.error('[Strava Auto Kudos] Error removing from storage:', error);
         }
     }
 };
+
+// Vérifions si le module est correctement défini
+if (typeof Storage !== 'undefined') {
+    console.log("[Strava Auto Kudos] Storage module loaded successfully");
+} else {
+    console.error("[Strava Auto Kudos] Storage module not properly defined!");
+}
 
 // Exporter le module de stockage
 if (typeof module !== 'undefined') {

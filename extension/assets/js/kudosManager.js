@@ -1,6 +1,8 @@
 /**
  * Module pour la gestion des Kudos
  */
+console.log("[Strava Auto Kudos] KudosManager module loading");
+
 const KudosManager = {
     /**
      * Active ou désactive la fonctionnalité Auto Kudos
@@ -384,4 +386,11 @@ const KudosManager = {
 // Exporter le module de gestion des kudos
 if (typeof module !== 'undefined') {
     module.exports = KudosManager;
+}
+
+// Ajoutez ces lignes à la fin du fichier
+if (typeof KudosManager !== 'undefined') {
+    console.log("[Strava Auto Kudos] KudosManager module loaded successfully");
+} else {
+    console.error("[Strava Auto Kudos] KudosManager module not properly defined!");
 }

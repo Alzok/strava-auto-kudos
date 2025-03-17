@@ -1,3 +1,5 @@
+console.log("[Strava Auto Kudos] App module loading");
+
 /**
  * Module d'initialisation de l'application
  */
@@ -88,6 +90,32 @@ const App = {
         }
     }
 };
+
+// Ajoutez ces lignes dans la fonction init de App (si elle existe)
+if (typeof App !== 'undefined') {
+    // Sauvegardez la fonction init originale si elle existe
+    const originalInit = App.init || function() {};
+    
+    // Remplacez-la par une version qui log
+    App.init = function() {
+        console.log("[Strava Auto Kudos] App initialization started");
+        try {
+            // Vérifiez les dépendances critiques avant l'initialisation
+            if (typeof KudosManager === 'undefined') {
+                throw new Error("KudosManager module is missing");
+            }
+            if (typeof Storage === 'undefined') {
+                throw new Error("Storage module is missing");
+            }
+            
+            // Appelez l'initialisation originale
+            originalInit.apply(this, arguments);
+            console.log("[Strava Auto Kudos] App initialization completed successfully");
+        } catch (error) {
+            console.error("[Strava Auto Kudos] App initialization failed:", error);
+        }
+    };
+}
 
 // Exporter le module d'application
 if (typeof module !== 'undefined') {
