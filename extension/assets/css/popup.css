@@ -1,0 +1,287 @@
+body.social_assistant {
+    margin: 0
+}
+
+.social_assistant main {
+    background: #f0f0f0
+}
+
+.social_assistant aside.user {
+    width: 25%;
+    float: left;
+    box-sizing: border-box;
+    background: #2b2b2b;
+    height: 100%;
+    -moz-box-shadow: 3px 0 11px rgba(0, 0, 0, .35);
+    -webkit-box-shadow: 3px 0 11px rgba(0, 0, 0, .35);
+    -o-box-shadow: 3px 0 11px rgba(0, 0, 0, .35);
+    box-shadow: 3px 0 11px rgba(0, 0, 0, .35)
+}
+
+.social_assistant section.content {
+    width: 500px;
+    height: 250px;
+    overflow: hidden;
+    float: left;
+    box-sizing: border-box
+}
+
+.social_assistant section.content article.element {
+    height: 250px;
+    width: 83.33px;
+    float: left;
+    top: 0;
+    -moz-box-shadow: 0 0 5px rgba(0, 0, 0, .35);
+    -webkit-box-shadow: 0 0 5px rgba(0, 0, 0, .35);
+    -o-box-shadow: 0 0 5px rgba(0, 0, 0, .35);
+    box-shadow: 0 0 5px rgba(0, 0, 0, .35);
+    box-sizing: border-box;
+    position: absolute;
+    overflow: hidden;
+    -webkit-transition: .2s linear;
+    -o-transition: .2s linear;
+    transition: .2s linear
+}
+
+.social_assistant section.content article.element:nth-child(2) {
+    left: 83.33px
+}
+
+.social_assistant section.content article.element:nth-child(3) {
+    left: 166.66px
+}
+
+.social_assistant section.content article.element:nth-child(4) {
+    left: 249.99px
+}
+
+.social_assistant section.content article.element:nth-child(5) {
+    left: 333.32px
+}
+
+.social_assistant section.content article.element:nth-child(6) {
+    left: 416.65px
+}
+
+.social_assistant section.content article.element.remove {
+    top: -100%
+}
+
+.social_assistant section.content article.element.active {
+    width: 100%;
+    left: 0
+}
+
+.social_assistant section.content article.element .conteneur {
+    height: 100%;
+    width: 100%;
+    position: relative;
+    background: 0 0;
+    display: flex;
+    -moz-box-shadow: 0 3px 7px rgba(0, 0, 0, .76);
+    -webkit-box-shadow: 0 3px 7px rgba(0, 0, 0, .76);
+    -o-box-shadow: 0 3px 7px rgba(0, 0, 0, .76);
+    box-shadow: 0 3px 7px rgba(0, 0, 0, .76)
+}
+
+.social_assistant section.content article.element .conteneur:after,
+.social_assistant section.content article.element .conteneur:before {
+    content: "";
+    height: 100%;
+    width: 100%;
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    -webkit-transition: .3s linear;
+    -o-transition: .3s linear;
+    transition: .3s linear
+}
+
+.social_assistant section.content article.element .conteneur:before {
+    z-index: 2;
+    animation: 3s linear infinite alternate opacity;
+    -webkit-animation: 3s linear infinite alternate opacity;
+    -moz-animation: 3s linear infinite alternate opacity;
+    -o-animation: 3s linear infinite alternate opacity
+}
+
+.social_assistant section.content article.element .conteneur:after {
+    opacity: 1;
+    z-index: 1
+}
+
+.social_assistant section.content article.element.facebook .conteneur:after {
+    background-image: linear-gradient(135deg, #324c81 0, #386af6 100%)
+}
+
+.social_assistant section.content article.element.twitter .conteneur:after {
+    background-image: linear-gradient(135deg, #1da1f2 0, #a0d7ff 100%)
+}
+
+.social_assistant section.content article.element.instagram .conteneur:after {
+    background: linear-gradient(145deg, #3051f1 10%, #c92bb7 70%) no-repeat
+}
+
+.social_assistant section.content article.element.linkedin .conteneur:after {
+    background-image: linear-gradient(135deg, #0084bf 0, #193584 100%)
+}
+
+.social_assistant section.content article.element.viadeo .conteneur:after {
+    background-image: linear-gradient(135deg, #f8562f 0, #e6923b 100%)
+}
+
+.social_assistant section.content article.element.youtube .conteneur:after {
+    background-image: linear-gradient(135deg, #e62117 0, #ff2c8d 100%)
+}
+
+.social_assistant section.content article.element.facebook .conteneur:before {
+    background-image: linear-gradient(135deg, #386af6 0, #324c81 100%)
+}
+
+.social_assistant section.content article.element.twitter .conteneur:before {
+    background-image: linear-gradient(135deg, #a0d7ff 0, #1da1f2 100%)
+}
+
+.social_assistant section.content article.element.instagram .conteneur:before {
+    background: linear-gradient(145deg, #c92bb7 10%, #3051f1 70%) no-repeat
+}
+
+.social_assistant section.content article.element.linkedin .conteneur:before {
+    background-image: linear-gradient(135deg, #193584 0, #0084bf 100%)
+}
+
+.social_assistant section.content article.element.viadeo .conteneur:before {
+    background-image: linear-gradient(135deg, #e6923b 0, #f8562f 100%)
+}
+
+.social_assistant section.content article.element.youtube .conteneur:before {
+    background-image: linear-gradient(135deg, #ff2c8d 0, #e62117 100%)
+}
+
+@keyframes opacity {
+    from {
+        opacity: 0
+    }
+
+    to {
+        opacity: 1
+    }
+}
+
+@-webkit-keyframes opacity {
+    from {
+        opacity: 0
+    }
+
+    to {
+        opacity: 1
+    }
+}
+
+@-moz-keyframes opacity {
+    from {
+        opacity: 0
+    }
+
+    to {
+        opacity: 1
+    }
+}
+
+@-o-keyframes opacity {
+    from {
+        opacity: 0
+    }
+
+    to {
+        opacity: 1
+    }
+}
+
+.social_assistant section.content article.element .conteneur .conteneur_svg {
+    width: 43px;
+    z-index: 3;
+    margin: auto;
+    opacity: 1;
+    visibility: visible;
+    -webkit-transition: .3s linear;
+    -o-transition: .3s linear;
+    transition: .3s linear
+}
+
+.social_assistant section.content article.element.show .conteneur .conteneur_svg {
+    opacity: 0;
+    visibility: hidden
+}
+
+.social_assistant section.content article.element .conteneur .conteneur_svg .svg {
+    fill: #fff
+}
+
+.social_assistant section.content article.element .stats {
+    display: none;
+    height: 25%;
+    width: 100%;
+    position: absolute;
+    bottom: 0;
+    border-bottom-left-radius: 3px;
+    border-bottom-right-radius: 3px;
+    background: #2b2b2b
+}
+
+.social_assistant section.content article.element .stats h1 {
+    text-transform: uppercase;
+    color: #fff;
+    box-sizing: border-box;
+    margin: 0;
+    padding-top: 9px;
+    font-size: 17px;
+    text-align: center;
+    text-shadow: -1px 2px 2px rgba(0, 0, 0, .5)
+}
+
+.social_assistant section.content article.element .conteneur .option {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    opacity: 0;
+    z-index: 3;
+    visibility: hidden;
+    -webkit-transition: .5s ease-in;
+    -o-transition: .5s ease-in;
+    transition: .5s ease-in
+}
+
+.social_assistant section.content article.element.show .conteneur .option {
+    opacity: 1;
+    visibility: visible
+}
+
+.social_assistant section.content article.element .conteneur .option nav {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 5px
+}
+
+.social_assistant section.content article.element .conteneur .option nav div {
+    width: 100%;
+    text-align: center;
+    cursor: pointer;
+    border: 1px solid #fff;
+    border-radius: 3px;
+    box-sizing: border-box;
+    padding: 5px;
+    margin-bottom: 10px
+}
+
+.social_assistant section.content article.element .conteneur .option nav div:last-child {
+    margin-bottom: 0
+}
+
+.social_assistant section.content article.element .conteneur .option nav div span {
+    font-size: 20px;
+    color: #fff;
+    text-transform: uppercase
+}

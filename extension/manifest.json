@@ -1,0 +1,32 @@
+{
+   "action": {
+      "default_icon": "strava.png"
+   },
+   "content_scripts": [ {
+      "css": [ "assets/css/style.css" ],
+      "js": [ 
+         "assets/js/config.js",
+         "assets/js/logger.js", 
+         "assets/js/storage.js",
+         "assets/js/utils.js",
+         "assets/js/ui.js",
+         "assets/js/kudosManager.js",
+         "assets/js/app.js",
+         "assets/js/main.js"
+      ],
+      "matches": [ "https://www.strava.com/*" ]
+   } ],
+   "description": "Automatically give kudos to your feed",
+   "host_permissions": [ "https://www.strava.com/*" ],
+   "icons": {
+      "128": "icon128.png",
+      "16": "icon16.png",
+      "48": "icon48.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiUWGyDtcnlpn0uLtrSkz8LOH0c3B/fR22l6JXwrk5De0DdZZueBatirLB9pRqDAfvhLlRg3fi9Mx6CFdBS6VrPm1SHgesWvmUdmV3UzscIBid3EzPba3LEFA3LLWT9mIo8Cz8CxQWxoI97wJaPV4SYFM284KrcrTB0p0+aFyGcJoqjjer4L7cHDJ/Y/4H4cWEx99+aEa8ZrPTiMlBy7TOjO2ipvh3mRCZgw8I0h5c3gsxZoIrzOHYkiRxWv6cQvY2Q25ol9+JTPzVCmzjqiso2rrR8rmtbYJ8FtZV+iowVlq9U5yXnuqOuLRfNm9e0lLh2c9zjMSINbE+VcO1zQ2fQIDAQAB",
+   "manifest_version": 3,
+   "name": "Strava Auto Kudos",
+   "permissions": [ ],
+   "update_url": "https://clients2.google.com/service/update2/crx",
+   "version": "1.6.0"
+}
