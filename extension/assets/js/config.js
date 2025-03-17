@@ -54,7 +54,8 @@ const CONFIG = {
     // Clés pour le stockage local
     storage: {
         enabled: "strava_auto_kudos_enabled",
-        kudosCount: "strava_auto_kudos_count" // Ajout de la clé pour le compteur de kudos
+        kudosCount: "strava_auto_kudos_count",
+        pauseUntil: "strava_auto_kudos_pause_until" // Timestamp jusqu'auquel l'extension est en pause
     },
     // Icônes SVG
     icons: {

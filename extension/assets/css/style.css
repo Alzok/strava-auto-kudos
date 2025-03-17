@@ -52,23 +52,28 @@
     fill: white !important;
 }
 
+/* Style pour la bulle en pause */
+.social_assistant_bulle.paused {
+    background-color: #999;
+    opacity: 0.6;
+}
+
 /* Compteur de Kudos */
 .kudos-counter {
     position: relative;
     background-color: #fc5200;
     color: white;
     border-radius: 15px;
-    min-width: 30px;
     height: 20px;
-    padding: 0 5px;
     font-size: 11px;
     line-height: 20px;
     font-weight: bold;
     text-align: center;
     z-index: 2147483646;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-    top: 0;
-    right: 0;
+    left: 17px;
+    top: 7px;
+    padding: 1px 7px;
 }
 
 /* Zone de notification */
@@ -220,4 +225,67 @@
         opacity: 0;
         transform: translateY(-70px) translateX(-50%) scale(0.8); /* Monte plus haut */
     }
+}
+
+/* Style pour le timer */
+#strava-auto-kudos-timer {
+    position: fixed;
+    bottom: 8px;
+    right: 6px;
+    background-color: rgba(252, 82, 0, 0.8);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: bold;
+    z-index: 2147483646;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+#strava-auto-kudos-timer span {
+    cursor: pointer;
+    margin-left: 5px;
+}
+
+/* Style pour l'alerte d'erreur */
+.strava-auto-kudos-alert {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2147483647;
+    background-color: #ffab00;
+    color: #333;
+    padding: 15px 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    font-weight: bold;
+    font-size: 14px;
+    text-align: center;
+    max-width: 90%;
+    line-height: 1.5;
+    display: flex;
+    align-items: center;
+}
+
+.strava-auto-kudos-alert-icon {
+    margin-right: 10px;
+}
+
+.strava-auto-kudos-alert-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #333;
+    cursor: pointer;
+    position: absolute;
+    top: 5px;
+    right: 10px;
+    padding: 0;
+    line-height: 1;
+}
+
+#cancel-pause {
+    margin-left: 5px;
+    cursor: pointer;
 }

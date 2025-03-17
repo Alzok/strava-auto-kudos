@@ -20,6 +20,7 @@ const App = {
             
             // Considérer toutes les pages de Strava comme valides pour afficher au moins l'UI
             Logger.info('Page Strava détectée, création de l\'interface');
+            const now = Date.now();
             
             // Charger l'état enregistré (activé/désactivé) ou l'activer par défaut
             CONFIG.state.isEnabled = Storage.load(CONFIG.storage.enabled, true); // Activé par défaut
@@ -47,7 +48,7 @@ const App = {
             console.error('[Strava Auto Kudos] App init error:', error);
         }
     },
-    
+
     onDOMLoaded: () => {
         Logger.debug('DOM chargé, création des éléments UI');
         console.log("[Strava Auto Kudos] onDOMLoaded() called");
@@ -64,12 +65,20 @@ const App = {
             // Initialiser le système d'auto-optimisation des délais
             App.initDelayOptimization();
             
+            // Charger l'état de la session si disponible
+            if (typeof UI.loadSessionState === 'function') {
+                UI.loadSessionState();
+            }
+            
             // Créer la bulle d'assistant avec des logs supplémentaires
             Logger.debug('Avant création de la bulle');
             console.log("[Strava Auto Kudos] Creating bubble now");
             const bulle = UI.createBulle();
             console.log("[Strava Auto Kudos] Bubble creation result:", bulle ? "Success" : "Failed");
             Logger.debug('Après création de la bulle:', bulle ? 'Succès' : 'Échec');
+            
+            // Vérifier s'il y a une pause temporaire active
+            UI.checkForActivePause();
             
             // Vérifier que l'élément compteur est correctement mis à jour
             const counter = document.querySelector(`#strava-auto-kudos-container .${CONFIG.classes.counter}`);
@@ -97,13 +106,13 @@ const App = {
             console.error('[Strava Auto Kudos] DOM loading error:', error);
         }
     },
-    
-    /**
+
+    /** 
      * Initialise le système d'auto-optimisation des délais
      */
     initDelayOptimization: () => {
         // Définir les délais initiaux
-        CONFIG.state.originalDelays = {
+        CONFIG.state.originalDelays = {  
             min: CONFIG.kudosDelay.min,
             max: CONFIG.kudosDelay.max
         };
@@ -195,6 +204,6 @@ if (typeof App !== 'undefined') {
 }
 
 // Exporter le module d'application
-if (typeof module !== 'undefined') {
+if (typeof module !== 'undefined' && module.exports) {
     module.exports = App;
 }

@@ -43,10 +43,16 @@ gulp.task('copy', function() {
     
     const images = gulp.src([
         'extension/*.png',
+        'extension/icons/*.png',  // Ajouter si vous avez un dossier d'icônes
+        'extension/assets/images/*.*'  // Copier toutes les images, pas uniquement PNG
     ], { base: 'extension' })
         .pipe(gulp.dest('prod'));
     
-    return merge(manifest, images);
+    // Ajouter HTML si vous en avez
+    const html = gulp.src('extension/*.html', { base: 'extension' })
+        .pipe(gulp.dest('prod'));
+    
+    return merge(manifest, images, html);
 });
 
 // Update manifest.json to use the minified files
@@ -59,6 +65,39 @@ gulp.task('update-manifest', function(done) {
     manifest.content_scripts[0].css = ['assets/css/style.min.css'];
     
     fs.writeFileSync('./prod/manifest.json', JSON.stringify(manifest, null, 2));
+    done();
+});
+
+// Ajouter une tâche de validation
+gulp.task('validate', function(done) {
+    const fs = require('fs');
+    const manifest = JSON.parse(fs.readFileSync('./prod/manifest.json'));
+    
+    // Vérifier les champs requis
+    const requiredFields = ['name', 'version', 'manifest_version'];
+    const missingFields = requiredFields.filter(field => !manifest[field]);
+    
+    if (missingFields.length > 0) {
+        console.error('Validation error: Missing required fields in manifest.json:', missingFields);
+        return done(new Error('Manifest validation failed'));
+    }
+    
+    console.log('Manifest validation successful!');
+    done();
+});
+
+// Mettre à jour le numéro de version (optionnel)
+gulp.task('bump-version', function(done) {
+    const fs = require('fs');
+    const manifest = JSON.parse(fs.readFileSync('./extension/manifest.json'));
+    
+    // Incrémenter la version (par exemple, le numéro de build)
+    const version = manifest.version.split('.');
+    version[2] = parseInt(version[2]) + 1;
+    manifest.version = version.join('.');
+    
+    fs.writeFileSync('./extension/manifest.json', JSON.stringify(manifest, null, 2));
+    console.log('Version bumped to:', manifest.version);
     done();
 });
 
@@ -79,5 +118,9 @@ gulp.task('build', gulp.series(
 // Default task
 gulp.task('default', gulp.series('build'));
 
-// Package for submission to Chrome Web Store
-gulp.task('package', gulp.series('build', 'zip'));
+// Améliorer la tâche package pour inclure la validation
+gulp.task('package', gulp.series(
+    'build',
+    'validate',
+    'zip'
+));
