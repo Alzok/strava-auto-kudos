@@ -10,17 +10,32 @@ const Logger = {
         console.info(`${Logger.prefix} ${message}`);
     },
     
-    error: (message, error) => {
-        console.error(`${Logger.prefix} ${message}`, error);
+    error: (message, error = null) => {
+        // Si error est null ou undefined, ne pas l'inclure dans le log
+        if (error) {
+            console.error(`${Logger.prefix} ${message}`, error);
+        } else {
+            console.error(`${Logger.prefix} ${message}`);
+        }
     },
     
     debug: (message, data = null) => {
-        console.debug(`${Logger.prefix} ${message}`, data || '');
+        // Si data est null ou undefined, ne pas l'inclure dans le log
+        if (data) {
+            console.debug(`${Logger.prefix} ${message}`, data);
+        } else {
+            console.debug(`${Logger.prefix} ${message}`);
+        }
     },
     
-    // Ajout de la méthode warn manquante
+    // Ajout de la méthode warn manquante avec la même logique que error
     warn: (message, data = null) => {
-        console.warn(`${Logger.prefix} ${message}`, data || '');
+        // Si data est null ou undefined, ne pas l'inclure dans le log
+        if (data) {
+            console.warn(`${Logger.prefix} ${message}`, data);
+        } else {
+            console.warn(`${Logger.prefix} ${message}`);
+        }
     }
 };
 
@@ -28,12 +43,6 @@ const Logger = {
 if (typeof Logger !== 'undefined') {
     Logger.init = function() {
         console.log("[Strava Auto Kudos] Logger initialized successfully");
-        
-        // Test logging methods
-        this.debug("Logger debug test");
-        this.info("Logger info test");
-        this.warn("Logger warn test");
-        this.error("Logger error test");
     };
     
     // Appelez immédiatement la fonction d'initialisation

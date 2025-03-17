@@ -10,31 +10,37 @@ const UI = {
     createBulle: () => {
         console.log("[Strava Auto Kudos] Creating UI bubble");
         try {
-            // Vérifier si la bulle existe déjà
-            let bulle = document.querySelector(`.${CONFIG.classes.bulle}`);
+            // Supprimer tous les conteneurs existants pour éviter les duplications
+            const existingContainers = document.querySelectorAll('#strava-auto-kudos-container');
+            existingContainers.forEach(container => {
+                console.log("[Strava Auto Kudos] Removing existing container to avoid duplication");
+                container.remove();
+            });
             
-            if (bulle) {
-                console.log("[Strava Auto Kudos] UI bubble already exists, updating it");
-                // Mettre à jour la bulle existante
-                UI.updateBulleStatus(CONFIG.state.isEnabled);
-                return bulle;
+            // Réinitialiser le compteur de kudos pour la session actuelle
+            CONFIG.state.kudosCount = 0;
+            console.log("[Strava Auto Kudos] Reset kudos count to 0 for current session");
+            
+            // Vérifier que le body existe
+            if (!document.body) {
+                console.error('[Strava Auto Kudos] document.body is not available yet!');
+                // Réessayer après un délai
+                setTimeout(UI.createBulle, 1000);
+                return null;
             }
             
-            // Créer la bulle
-            bulle = document.createElement('div');
+            // Créer le conteneur pour la bulle et le compteur
+            const container = document.createElement('div');
+            container.id = "strava-auto-kudos-container";
+            
+            // Créer la bulle 
+            const bulle = document.createElement('div');
             bulle.className = CONFIG.classes.bulle;
-            
-            // Charger le compteur de kudos
-            CONFIG.state.kudosCount = Storage.load(CONFIG.storage.kudosCount, 0);
-            
-            // Ajouter le compteur à la bulle
-            const counter = document.createElement('div');
-            counter.className = CONFIG.classes.counter;
-            counter.textContent = CONFIG.state.kudosCount;
-            bulle.appendChild(counter);
+            bulle.id = "strava-auto-kudos-bubble";
             
             // Ajouter l'icône à la bulle en fonction de l'état
             const iconDiv = document.createElement('div');
+            iconDiv.className = "icon-container";
             iconDiv.innerHTML = CONFIG.state.isEnabled ? CONFIG.icons.pause : CONFIG.icons.thumbsUp;
             bulle.appendChild(iconDiv);
             
@@ -45,13 +51,30 @@ const UI = {
             
             // Ajouter l'événement de clic pour activer/désactiver
             bulle.addEventListener('click', () => {
+                console.log("[Strava Auto Kudos] Bubble clicked, toggling auto kudos");
                 KudosManager.toggleAutoKudos();
             });
             
-            // Ajouter la bulle au body
-            document.body.appendChild(bulle);
+            // Créer le compteur
+            const counter = document.createElement('div');
+            counter.className = CONFIG.classes.counter;
+            counter.textContent = CONFIG.state.kudosCount;
+            console.log("[Strava Auto Kudos] New counter created with value:", CONFIG.state.kudosCount);
             
-            console.log("[Strava Auto Kudos] UI bubble created successfully");
+            // Créer une zone pour les notifications flottantes
+            const notifArea = document.createElement('div');
+            notifArea.id = "strava-auto-kudos-notifications";
+            
+            // Assembler les éléments
+            container.appendChild(notifArea);  // Zone de notification au-dessus
+            container.appendChild(counter);    // Compteur 
+            container.appendChild(bulle);      // Bulle en dessous
+            
+            // Ajouter le conteneur au body
+            document.body.appendChild(container);
+            
+            console.log("[Strava Auto Kudos] UI bubble created successfully and added to DOM");
+            
             return bulle;
         } catch (error) {
             console.error('[Strava Auto Kudos] Error creating UI bubble:', error);
@@ -64,9 +87,22 @@ const UI = {
      * @returns {HTMLElement} - L'élément bulle
      */
     ensureBulleExists: () => {
-        let bulle = document.querySelector(`.${CONFIG.classes.bulle}`);
+        // Vérifier d'abord les duplications de conteneurs et les corriger
+        const containers = document.querySelectorAll('#strava-auto-kudos-container');
+        
+        if (containers.length > 1) {
+            console.warn('[Strava Auto Kudos] Multiple containers detected, cleaning up...');
+            // Supprimer tous les conteneurs sauf le premier
+            for (let i = 1; i < containers.length; i++) {
+                containers[i].remove();
+            }
+        }
+        
+        // Rechercher la bulle
+        let bulle = document.querySelector(`#strava-auto-kudos-bubble`);
         
         if (!bulle) {
+            console.log('[Strava Auto Kudos] No bubble found, creating a new one');
             bulle = UI.createBulle();
         }
         
@@ -109,35 +145,95 @@ const UI = {
      */
     updateKudosCounter: () => {
         const bulle = UI.ensureBulleExists();
-        let counter = bulle.querySelector(`.${CONFIG.classes.counter}`);
+        let counter = document.querySelector(`#strava-auto-kudos-container .${CONFIG.classes.counter}`);
         
         if (!counter) {
             counter = document.createElement('div');
             counter.className = CONFIG.classes.counter;
-            bulle.appendChild(counter);
+            const container = document.getElementById('strava-auto-kudos-container');
+            if (container) {
+                container.appendChild(counter);
+            }
         }
         
         counter.textContent = CONFIG.state.kudosCount > 999 ? '999+' : CONFIG.state.kudosCount;
-        
-        // Sauvegarder le compteur dans le stockage local
-        Storage.save(CONFIG.storage.kudosCount, CONFIG.state.kudosCount);
     },
     
     /**
-     * Incrémente le compteur de kudos
+     * Incrémente le compteur de kudos et met à jour l'interface
      */
     incrementKudosCount: () => {
         try {
-            CONFIG.state.kudosCount++;
+            // Incrémenter le compteur pour cette session uniquement
+            CONFIG.state.kudosCount += 1;
             
-            const counter = document.querySelector(`.${CONFIG.classes.bulle} .${CONFIG.classes.counter}`);
+            console.log(`[Strava Auto Kudos] Incrementing kudos counter to:`, CONFIG.state.kudosCount);
+            
+            // Mettre à jour l'interface
+            const counter = document.querySelector(`#strava-auto-kudos-container .${CONFIG.classes.counter}`);
             if (counter) {
-                counter.textContent = CONFIG.state.kudosCount;
+                // Forcer l'affichage de la nouvelle valeur
+                const displayValue = CONFIG.state.kudosCount > 999 ? '999+' : CONFIG.state.kudosCount;
+                counter.textContent = displayValue;
+                console.log('[Strava Auto Kudos] Counter UI updated to:', displayValue);
+            } else {
+                console.error('[Strava Auto Kudos] Counter element not found, creating new bubble');
+                // Si le compteur n'existe pas, recréer la bulle
+                UI.createBulle();
             }
             
-            Storage.save(CONFIG.storage.kudosCount, CONFIG.state.kudosCount);
+            // Ne pas sauvegarder le compteur dans localStorage pour qu'il soit réinitialisé à chaque session
         } catch (error) {
             console.error('[Strava Auto Kudos] Error incrementing kudos count:', error);
+        }
+    },
+    
+    /**
+     * Crée une animation de kudos à partir d'un élément
+     * @param {HTMLElement} element - Élément kudos depuis lequel l'animation démarre
+     */
+    createKudosAnimation: (element) => {
+        try {
+            // Toujours positionner l'animation au-dessus du bouton et du compteur
+            const container = document.getElementById('strava-auto-kudos-container');
+            let startX, startY;
+            
+            if (container) {
+                const rect = container.getBoundingClientRect();
+                // Position aléatoire horizontalement (décalage de -20px à +20px)
+                const randomOffset = Math.random() * 40 - 20;
+                startX = rect.left + rect.width / 2 + randomOffset;
+                startY = rect.top - 20; // Positionnement au-dessus du conteneur
+            } else {
+                // Fallback si le conteneur n'est pas trouvé
+                startX = window.innerWidth - 60;
+                startY = window.innerHeight - 100;
+            }
+            
+            // Créer l'élément de notification
+            const notification = document.createElement('div');
+            notification.className = `${CONFIG.classes.floatingNotification} ${CONFIG.classes.success}`;
+            
+            // Utiliser "+1" comme texte au lieu de l'icône
+            notification.textContent = "+1";
+            
+            // Positionner la notification au point de départ
+            notification.style.position = 'fixed';
+            notification.style.left = `${startX}px`;
+            notification.style.top = `${startY}px`;
+            notification.style.transform = 'translateX(-50%)';
+            
+            // Ajouter au DOM
+            document.body.appendChild(notification);
+            
+            // Supprimer après l'animation (augmentation du délai à 2500ms)
+            setTimeout(() => {
+                if (document.body.contains(notification)) {
+                    document.body.removeChild(notification);
+                }
+            }, 2500);
+        } catch (error) {
+            console.error('[Strava Auto Kudos] Error creating kudos animation:', error);
         }
     },
     
@@ -169,52 +265,69 @@ const UI = {
             }
         }, 1600); // Un peu plus que la durée de l'animation (1.5s)
     },
+
+    /**
+     * Fonction interne pour afficher une notification
+     * @private
+     * @param {string} type - Type de notification ('success' ou 'error')
+     * @param {HTMLElement} [element] - Élément à partir duquel l'animation démarre (pour success)
+     */
+    _displayNotification: (type, element) => {
+        try {
+            if (type === 'success' && element) {
+                // Animer un "+1" par kudos depuis le bouton 
+                UI.createKudosAnimation(element);
+                return;
+            }
+            
+            // Pour les erreurs, ne rien afficher (suppression de l'icône d'erreur)
+            if (type === 'error') {
+                return;
+            }
+            
+            // Fallback pour les autres cas
+            const notificationArea = document.querySelector('#strava-auto-kudos-notifications');
+            if (!notificationArea) return;
+            
+            if (type === 'success') {
+                const notification = document.createElement('div');
+                notification.className = `${CONFIG.classes.floatingNotification} ${CONFIG.classes.success}`;
+                notification.textContent = "+1";
+                
+                notificationArea.appendChild(notification);
+                
+                // Supprimer après l'animation
+                setTimeout(() => {
+                    if (notification && notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 2500);
+            }
+        } catch (error) {
+            console.error('[Strava Auto Kudos] Error displaying notification:', error);
+        }
+    },
     
     /**
-     * Affiche une notification de succès à proximité du bouton kudos cliqué
-     * @param {HTMLElement} kudosButton - Le bouton kudos qui a été cliqué
+     * Affiche une notification de succès
+     * @param {HTMLElement} [kudosButton] - Le bouton kudos qui a été cliqué
      */
     showSuccessNotification: (kudosButton) => {
-        UI.showNotification(kudosButton, CONFIG.icons.floatingSuccess, CONFIG.classes.success);
+        UI._displayNotification('success', kudosButton);
     },
     
     /**
-     * Affiche une notification d'erreur à proximité du bouton kudos problématique
-     * @param {HTMLElement} kudosButton - Le bouton kudos qui a échoué
+     * Affiche une notification d'erreur
      */
-    showErrorNotification: (kudosButton) => {
-        UI.showNotification(kudosButton, CONFIG.icons.floatingError, CONFIG.classes.error);
+    showErrorNotification: () => {
+        UI._displayNotification('error');
     },
     
     /**
-     * Affiche une notification flottante près d'un élément
-     * @param {HTMLElement} element - Élément à côté duquel afficher la notification
-     * @param {string} icon - HTML de l'icône à afficher
-     * @param {string} className - Classe CSS additionnelle
+     * Fonction pour réinitialiser le compteur de kudos de la session actuelle
      */
-    showNotification: (element, icon, className) => {
-        try {
-            if (!element) return;
-            
-            const rect = element.getBoundingClientRect();
-            
-            const notification = document.createElement('div');
-            notification.className = `${CONFIG.classes.floatingNotification} ${className}`;
-            notification.style.top = `${window.scrollY + rect.top + rect.height / 2}px`;
-            notification.style.left = `${window.scrollX + rect.left + rect.width / 2}px`;
-            notification.innerHTML = icon;
-            
-            document.body.appendChild(notification);
-            
-            // Supprimer la notification après un délai
-            setTimeout(() => {
-                if (document.body.contains(notification)) {
-                    document.body.removeChild(notification);
-                }
-            }, 1500);
-        } catch (error) {
-            console.error('[Strava Auto Kudos] Error showing notification:', error);
-        }
+    resetSessionKudosCount: () => {
+        CONFIG.state.kudosCount = 0;
     }
 };
 

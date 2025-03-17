@@ -11,9 +11,9 @@
 console.log("[Strava Auto Kudos] Main script loading");
 console.log("[Strava Auto Kudos] Document ready state:", document.readyState);
 
-// Démarrer l'application une fois que tous les modules sont chargés
-document.addEventListener('DOMContentLoaded', () => {
-    console.log("[Strava Auto Kudos] DOMContentLoaded event triggered");
+// Fonction d'initialisation principale
+function initializeExtension() {
+    console.log("[Strava Auto Kudos] Initializing extension");
     
     // Vérifier que les modules requis sont bien chargés
     console.log("[Strava Auto Kudos] Checking required modules:");
@@ -25,7 +25,12 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("- KudosManager module:", ((typeof KudosManager !== 'undefined') ? "Loaded" : "MISSING"));
     console.log("- App module:", ((typeof App !== 'undefined') ? "Loaded" : "MISSING"));
 
-    if (typeof CONFIG !== 'undefined' && 
+    // Vérifier si nous sommes sur une page Strava
+    const isStravaPage = window.location.href.includes("strava.com");
+    console.log("[Strava Auto Kudos] Is Strava page:", isStravaPage, "URL:", window.location.href);
+
+    if (isStravaPage && 
+        typeof CONFIG !== 'undefined' && 
         typeof Logger !== 'undefined' &&
         typeof Storage !== 'undefined' &&
         typeof Utils !== 'undefined' &&
@@ -49,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('[Strava Auto Kudos] Erreur: Un ou plusieurs modules n\'ont pas été chargés correctement.');
         
         // Essayons quand même d'initialiser si les modules essentiels sont présents
-        if (typeof CONFIG !== 'undefined' && typeof Logger !== 'undefined' && typeof App !== 'undefined') {
+        if (isStravaPage && typeof CONFIG !== 'undefined' && typeof Logger !== 'undefined' && typeof App !== 'undefined') {
             console.log("[Strava Auto Kudos] Tentative d'initialisation avec les modules disponibles");
             try {
                 App.init();
@@ -58,9 +63,30 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
+}
+
+// Démarrer l'application une fois que tous les modules sont chargés
+document.addEventListener('DOMContentLoaded', () => {
+    console.log("[Strava Auto Kudos] DOMContentLoaded event triggered");
+    initializeExtension();
 });
 
+// Alternative: utiliser window.onload comme fallback
+window.onload = function() {
+    console.log("[Strava Auto Kudos] window.onload event triggered");
+    initializeExtension(); // Exécuter sans condition pour s'assurer que ça se lance
+};
+
+// Ajouter un délai pour s'assurer que tout est chargé, même si les autres événements échouent
+setTimeout(() => {
+    console.log("[Strava Auto Kudos] Timeout initialization triggered");
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        initializeExtension();
+    }
+}, 2000); // 2 secondes de délai
+
 // Ajout d'une vérification de l'état du chargement de la page
-if (document.readyState === 'complete') {
-    console.log("[Strava Auto Kudos] Document already complete, might have missed DOMContentLoaded");
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    console.log("[Strava Auto Kudos] Document already " + document.readyState + ", initializing immediately");
+    setTimeout(initializeExtension, 500); // Small delay to ensure all scripts are properly loaded
 }

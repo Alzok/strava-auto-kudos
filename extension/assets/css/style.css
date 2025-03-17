@@ -2,182 +2,87 @@
     overflow: hidden;
     box-sizing: border-box;
     padding: 3px;
-    position: fixed;
+    position: relative;
     text-transform: uppercase;
     font-size: 18px;
     text-align: center;
     height: 50px;
     width: 50px;
-    bottom: 41px;
-    right: 43px;
     z-index: 2147483647;
     border-radius: 50px;
     -webkit-transition: .3s;
     -moz-transition: .3s;
     transition: .3s;
-    -moz-box-shadow: 2px 2px 7px 2px rgba(0, 0, 0, .32);
-    -webkit-box-shadow: 2px 2px 7px 2px rgba(0, 0, 0, .32);
-    box-shadow: 2px 2px 7px 2px rgba(0, 0, 0, .32);
-    background: 0 0;
-    cursor: pointer
+    box-shadow: 2px 2px 7px 2px rgba(0, 0, 0, .12);
+    background: #fc5200;
+    cursor: pointer;
+    display: block;
+    visibility: visible;
+    opacity: 1;
 }
 
 .social_assistant_bulle svg {
-    height: 32px !important;
-    width: 32px !important;
+    height: 24px !important;
+    width: 24px !important;
     position: relative;
     z-index: 999;
     stroke: initial;
-    fill: rgb(255 255 255 / 73%);
-    top: 5px;
-    -webkit-transition: .3s;
-    -moz-transition: .3s;
-    transition: .3s
-}
-
-.social_assistant_bulle .run {
+    fill: white !important;
     -webkit-transition: .3s;
     -moz-transition: .3s;
     transition: .3s;
-    animation: 1.5s linear infinite rotate;
-    -webkit-animation: 1.5s linear infinite rotate;
-    -moz-animation: 1.5s linear infinite rotate;
-    width: 40px;
-    height: 40px;
-    border-color: rgba(255, 255, 255, .12) rgba(255, 255, 255, .12) rgba(255, 255, 255, .12) rgb(255 255 255 / 61%);
-    border-width: 2px;
-    border-style: solid;
-    border-radius: 100%;
-    position: absolute;
-    opacity: 0;
-    visibility: hidden;
-    left: 4px;
-    top: 4px;
-    z-index: 9;
-    -moz-box-shadow: rgb(255 255 255 / 54%) 0 0 6px 1px;
-    -webkit-box-shadow: rgb(255 255 255 / 54%) 0 0 6px 1px;
-    box-shadow: rgb(255 255 255 / 54%) 0 0 6px 1px
+}
+
+/* Ajustement pour l'icône pause */
+.social_assistant_bulle svg[viewBox="0 0 16 16"] {
+    height: 20px !important;
+    width: 20px !important;
+    fill: white !important;
+}
+
+.social_assistant_bulle .icon-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
 }
 
 .social_assistant_bulle:hover svg {
-    fill: rgb(255 255 255 / 100%)
-}
-
-.social_assistant_bulle:hover .run {
-    -moz-box-shadow: rgb(255 255 255 / 0%) 0 0 6px 1px;
-    -webkit-box-shadow: rgb(255 255 255 / 0%) 0 0 6px 1px;
-    box-shadow: rgb(255 255 255 / 0%) 0 0 6px 1px;
-    border-color: rgba(255, 255, 255, .12) rgba(255, 255, 255, .12) rgba(255, 255, 255, .12) rgb(255 255 255 / 90%)
-}
-
-.social_assistant_bulle.run .run {
-    opacity: 1;
-    visibility: visible
-}
-
-@keyframes rotate {
-    from {
-        transform: rotate(0)
-    }
-
-    to {
-        transform: rotate(360deg)
-    }
-}
-
-@-webkit-keyframes rotate {
-    from {
-        transform: rotate(0)
-    }
-
-    to {
-        transform: rotate(360deg)
-    }
-}
-
-@-moz-keyframes rotate {
-    from {
-        transform: rotate(0)
-    }
-
-    to {
-        transform: rotate(360deg)
-    }
-}
-
-.social_assistant_bulle::after,
-.social_assistant_bulle::before {
-    content: '';
-    position: absolute;
-    z-index: 1;
-    width: 100%;
-    height: 100%;
-    left: 0;
-    top: 0
-}
-
-.social_assistant_bulle::after {
-    opacity: 0;
-    z-index: 2;
-    animation: 3s linear infinite alternate gradient;
-    -webkit-animation: 3s linear infinite alternate gradient;
-    -moz-animation: 3s linear infinite alternate gradient
-}
-
-.social_assistant_bulle.strava:after {
-    background-image: linear-gradient(135deg, #ff5300 0, red 100%)
-}
-
-.social_assistant_bulle.strava:before {
-    background-image: linear-gradient(135deg, red 0, #ff5300 100%)
-}
-
-@keyframes gradient {
-    from {
-        opacity: 0
-    }
-
-    to {
-        opacity: 1
-    }
-}
-
-@-webkit-keyframes gradient {
-    from {
-        opacity: 0
-    }
-
-    to {
-        opacity: 1
-    }
-}
-
-@-moz-keyframes gradient {
-    from {
-        opacity: 0
-    }
-
-    to {
-        opacity: 1
-    }
+    fill: white !important;
 }
 
 /* Compteur de Kudos */
 .kudos-counter {
-    position: absolute;
-    top: 0px;
-    right: 0px;
+    position: relative;
     background-color: #fc5200;
     color: white;
-    border-radius: 50%;
-    width: 20px;
+    border-radius: 15px;
+    min-width: 30px;
     height: 20px;
+    padding: 0 5px;
     font-size: 11px;
     line-height: 20px;
     font-weight: bold;
     text-align: center;
-    z-index: 1000;
+    z-index: 2147483646;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    top: 0;
+    right: 0;
+}
+
+/* Zone de notification */
+#strava-auto-kudos-notifications {
+    min-height: 40px;
+    position: relative;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 60px;
+    pointer-events: none;
+    z-index: 999999;
 }
 
 /* Animations des notifications flottantes */
@@ -190,7 +95,7 @@
 }
 
 .floating-notification.success {
-    animation: float-up 1.5s ease-out forwards;
+    animation: float-up-thumbs 1.5s ease-out forwards;
 }
 
 .floating-notification.error {
@@ -198,20 +103,19 @@
 }
 
 .floating-notification svg {
-    width: 20px !important;
-    height: 20px !important;
-    fill: white;
+    width: 30px !important;
+    height: 30px !important;
 }
 
 .floating-notification.success svg {
-    fill: #18AB29;
+    fill: #FC5200;
 }
 
 .floating-notification.error svg {
     fill: #D9534F;
 }
 
-@keyframes float-up {
+@keyframes float-up-thumbs {
     0% {
         transform: translateY(0) scale(0.5);
         opacity: 0;
@@ -223,24 +127,97 @@
     }
 
     100% {
-        transform: translateY(-50px) scale(0.7);
+        transform: translateY(-60px) scale(0.7);
+        opacity: 0;
+    }
+}
+
+@keyframes float-up {
+    0% {
+        transform: translateY(0) scale(0.5) translateX(-50%);
+        opacity: 0;
+    }
+
+    20% {
+        opacity: 1;
+        transform: translateY(0) scale(1) translateX(-50%);
+    }
+
+    100% {
+        transform: translateY(-40px) scale(0.7) translateX(-50%);
         opacity: 0;
     }
 }
 
 @-webkit-keyframes float-up {
     0% {
-        -webkit-transform: translateY(0) scale(0.5);
+        -webkit-transform: translateY(0) scale(0.5) translateX(-50%);
         opacity: 0;
     }
 
     20% {
         opacity: 1;
-        -webkit-transform: translateY(0) scale(1);
+        -webkit-transform: translateY(0) scale(1) translateX(-50%);
     }
 
     100% {
-        -webkit-transform: translateY(-50px) scale(0.7);
+        -webkit-transform: translateY(-40px) scale(0.7) translateX(-50%);
         opacity: 0;
+    }
+}
+
+/* Styles du conteneur principal */
+#strava-auto-kudos-container {
+    position: fixed;
+    bottom: 41px;
+    right: 43px;
+    z-index: 2147483647;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Style pour les notifications */
+#strava-auto-kudos-notifications .floating-notification {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/* Animation pour le +1 */
+.floating-notification.success {
+    position: fixed;
+    font-size: 16px;
+    font-weight: bold;
+    color: #fc5200; /* Orange Strava */
+    width: auto;
+    height: auto;
+    border-radius: 4px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: none; /* Suppression de l'ombre */
+    z-index: 9999;
+    animation: float-up 2.5s ease-out forwards; /* Animation plus longue */
+    opacity: 1;
+    transform: translateX(-50%);
+}
+
+@keyframes float-up {
+    0% {
+        opacity: 0;
+        transform: translateY(5px) translateX(-50%) scale(0.9);
+    }
+    15% {
+        opacity: 1;
+        transform: translateY(-10px) translateX(-50%) scale(1.2);
+    }
+    30% {
+        transform: translateY(-20px) translateX(-50%) scale(1.1);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-70px) translateX(-50%) scale(0.8); /* Monte plus haut */
     }
 }

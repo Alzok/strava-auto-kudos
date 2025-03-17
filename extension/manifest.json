@@ -14,7 +14,8 @@
          "assets/js/app.js",
          "assets/js/main.js"
       ],
-      "matches": [ "https://www.strava.com/*" ]
+      "matches": [ "https://www.strava.com/*" ],
+      "run_at": "document_end"
    } ],
    "description": "Automatically give kudos to your feed",
    "host_permissions": [ "https://www.strava.com/*" ],

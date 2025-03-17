@@ -79,16 +79,27 @@ const KudosManager = {
             const currentUserHref = userMenuLink.getAttribute('href');
             Logger.debug(`URL de l'utilisateur courant: ${currentUserHref}`);
             
-            // Récupère toutes les entrées du flux
-            const feedEntries = document.querySelectorAll(CONFIG.selectors.feedEntry);
-            Logger.debug(`Nombre total d'entrées dans le flux: ${feedEntries.length}`);
+            // Récupérer d'abord toutes les entrées normales
+            const regularEntries = document.querySelectorAll(CONFIG.selectors.feedEntry);
+            
+            // Récupérer ensuite toutes les entrées d'activités groupées
+            const groupedActivities = [];
+            document.querySelectorAll(CONFIG.selectors.groupActivityItem).forEach(item => {
+                groupedActivities.push(item);
+            });
+            
+            // Combiner toutes les entrées
+            const allEntries = [...regularEntries, ...groupedActivities];
+            
+            Logger.debug(`Nombre total d'entrées dans le flux: ${allEntries.length} (${regularEntries.length} régulières, ${groupedActivities.length} groupées)`);
             
             let newEntriesCount = 0;
             
             // Déterminer les délais à utiliser
             const delays = Utils.getCurrentDelays();
             
-            for (const entry of feedEntries) {
+            // Traitement dans l'ordre original des activités (sans randomisation)
+            for (const entry of allEntries) {
                 // Vérifier si l'extension est toujours active
                 if (!CONFIG.state.isEnabled) {
                     Logger.debug('Extension désactivée pendant le traitement, arrêt de la boucle');
@@ -106,12 +117,41 @@ const KudosManager = {
                 CONFIG.state.processedEntries.add(entryId);
                 newEntriesCount++;
                 
-                // Attendre un temps aléatoire pour simuler un comportement humain
-                const delay = Utils.randomIntFromInterval(delays.min, delays.max);
+                // Attendre un temps minimal pour éviter d'être bloqué
+                const delay = CONFIG.state.errorCount > 0 
+                    ? Utils.randomIntFromInterval(delays.min, delays.max) 
+                    : Math.min(50, delays.min); // Délai ultra-court si pas d'erreurs précédentes
                 await Utils.sleep(delay);
                 
-                // Récupère l'URL du propriétaire de l'entrée
-                const ownerNameElement = entry.querySelector(CONFIG.selectors.ownerName);
+                // Trouver le bouton kudos - méthode plus robuste pour les activités groupées
+                let kudosButton;
+                
+                // Pour les activités groupées, chercher le bouton kudos directement dans l'entrée
+                if (entry.closest(CONFIG.selectors.groupActivityList)) {
+                    kudosButton = entry.querySelector(CONFIG.selectors.kudosButton);
+                    Logger.debug('Entrée groupée détectée, bouton kudos trouvé:', kudosButton ? 'oui' : 'non');
+                } else {
+                    // Pour les entrées normales, méthode standard
+                    kudosButton = entry.querySelector(CONFIG.selectors.kudosButton);
+                    Logger.debug('Entrée normale, bouton kudos trouvé:', kudosButton ? 'oui' : 'non');
+                }
+                
+                // Si on n'a pas trouvé le bouton, on ignore cette entrée
+                if (!kudosButton) {
+                    Logger.debug('Bouton kudos non trouvé dans cette entrée', entry);
+                    continue;
+                }
+                
+                // Récupère l'URL du propriétaire de l'entrée - plus robuste
+                let ownerNameElement;
+                if (entry.closest(CONFIG.selectors.groupActivityList)) {
+                    // Pour les activités groupées
+                    ownerNameElement = entry.querySelector(CONFIG.selectors.ownerName);
+                } else {
+                    // Pour les entrées normales
+                    ownerNameElement = entry.querySelector(CONFIG.selectors.ownerName) || 
+                                      entry.closest(CONFIG.selectors.feedEntry)?.querySelector(CONFIG.selectors.ownerName);
+                }
                 
                 if (!ownerNameElement) {
                     Logger.debug('Élément nom du propriétaire non trouvé dans cette entrée', entry);
@@ -126,58 +166,65 @@ const KudosManager = {
                     continue;
                 }
                 
-                // Trouver le bouton kudos
-                const kudosButton = entry.querySelector(CONFIG.selectors.kudosButton);
-                
-                if (!kudosButton) {
-                    Logger.debug('Bouton kudos non trouvé dans cette entrée', entry);
-                    continue;
-                }
-                
                 // Vérifier si le kudos n'est pas déjà donné
                 const unfilledKudosIcon = kudosButton.querySelector(CONFIG.selectors.unfilledKudos);
                 
                 if (unfilledKudosIcon) {
                     try {
                         Logger.debug(`Tentative de kudos pour l'entrée ${entryId}`);
-                        kudosButton.click();
                         
-                        // Attendre un peu pour vérifier si l'action a réussi
-                        await Utils.sleep(200);
+                        // Approche ultra-rapide pour cliquer sur le bouton
+                        try {
+                            // Clic direct sans événements complexes pour maximiser la vitesse
+                            kudosButton.click();
+                            console.log('[Strava Auto Kudos] Clicked kudos button directly:', kudosButton);
+                        } catch (e) {
+                            // En cas d'échec, essayer avec un événement MouseEvent plus complet
+                            const clickEvent = new MouseEvent('click', {
+                                bubbles: true,
+                                cancelable: true,
+                                view: window
+                            });
+                            kudosButton.dispatchEvent(clickEvent);
+                            console.log('[Strava Auto Kudos] Used dispatchEvent for click fallback');
+                        }
+                        
+                        // Vérification très rapide si l'action a réussi
+                        await Utils.sleep(100); // Très court délai de vérification
                         
                         // Vérifier si le bouton a changé d'état
                         const stillUnfilled = kudosButton.querySelector(CONFIG.selectors.unfilledKudos);
                         
                         if (stillUnfilled) {
-                            // Possible erreur, ajouter à la liste des entrées à réessayer
-                            Logger.debug(`Échec potentiel du kudos pour l'entrée ${entryId}, ajout à la file d'attente`);
+                            // Échec - vérifier à nouveau après un délai plus long
+                            await Utils.sleep(200); // Attendre un peu plus
+                            const stillUnfilledSecondCheck = kudosButton.querySelector(CONFIG.selectors.unfilledKudos);
                             
-                            CONFIG.state.failedKudos.push({
-                                entryId,
-                                kudosButton,
-                                attempts: 1,
-                                timestamp: Date.now()
-                            });
-                            
-                            CONFIG.state.errorCount++;
-                            
-                            // Afficher une notification d'erreur
-                            UI.showErrorNotification(kudosButton);
-                            
-                            // Si trop d'erreurs consécutives, augmenter le délai et arrêter la boucle actuelle
-                            if (CONFIG.state.errorCount > 5) {
-                                Logger.info('Trop d\'erreurs détectées, pause temporaire');
-                                break;
+                            if (stillUnfilledSecondCheck) {
+                                // Vraiment en échec, ajouter à la liste des entrées à réessayer
+                                Logger.debug(`Échec du kudos pour l'entrée ${entryId}`);
+                                
+                                CONFIG.state.failedKudos.push({
+                                    entryId,
+                                    kudosButton,
+                                    attempts: 1,
+                                    timestamp: Date.now()
+                                });
+                                
+                                CONFIG.state.errorCount++;
+                                
+                                // Si trop d'erreurs, ralentir considérablement
+                                if (CONFIG.state.errorCount > 5) {
+                                    Logger.info('Trop d\'erreurs détectées, ralentissement significatif');
+                                    await Utils.sleep(1000); // Pause marquée
+                                }
+                            } else {
+                                // Finalement réussi après une attente plus longue
+                                KudosManager.handleSuccessfulKudos(entryId, kudosButton);
                             }
                         } else {
-                            // Kudos réussi, réinitialiser le compteur d'erreurs
-                            CONFIG.state.errorCount = Math.max(0, CONFIG.state.errorCount - 1);
-                            
-                            // Incrémenter le compteur de kudos
-                            UI.incrementKudosCount();
-                            
-                            // Afficher une notification de succès
-                            UI.showSuccessNotification(kudosButton);
+                            // Kudos réussi immédiatement
+                            KudosManager.handleSuccessfulKudos(entryId, kudosButton);
                         }
                     } catch (clickError) {
                         // Erreur lors du clic, possible erreur 429
@@ -185,8 +232,8 @@ const KudosManager = {
                         
                         CONFIG.state.errorCount++;
                         
-                        // Afficher une notification d'erreur
-                        UI.showErrorNotification(kudosButton);
+                        // Afficher une notification d'erreur sans paramètre
+                        UI.showErrorNotification();
                         
                         // Ajouter l'entrée à réessayer plus tard
                         CONFIG.state.failedKudos.push({
@@ -219,6 +266,27 @@ const KudosManager = {
         } finally {
             CONFIG.state.isProcessing = false;
         }
+    },
+    
+    /**
+     * Fonction utilitaire pour traiter un kudos réussi
+     * @param {string} entryId - ID de l'entrée
+     * @param {HTMLElement} kudosButton - Bouton kudos
+     */
+    handleSuccessfulKudos: (entryId, kudosButton) => {
+        // Kudos réussi, réinitialiser le compteur d'erreurs
+        CONFIG.state.errorCount = Math.max(0, CONFIG.state.errorCount - 1);
+        
+        // Suivre les statistiques pour l'auto-optimisation
+        CONFIG.state.kudosAttempts = (CONFIG.state.kudosAttempts || 0) + 1;
+        CONFIG.state.kudosSuccesses = (CONFIG.state.kudosSuccesses || 0) + 1;
+        
+        // Incrémenter le compteur de kudos
+        console.log('[Strava Auto Kudos] Successfully gave kudos to entry:', entryId);
+        UI.incrementKudosCount();
+        
+        // Afficher une notification de succès
+        UI.showSuccessNotification(kudosButton);
     },
     
     /**
@@ -315,17 +383,19 @@ const KudosManager = {
                         
                         failCount++;
                         
-                        // Afficher une notification d'erreur
-                        UI.showErrorNotification(item.kudosButton);
+                        // Afficher une notification d'erreur sans paramètre
+                        UI.showErrorNotification();
                     } else {
                         // Kudos réussi
                         successCount++;
                         CONFIG.state.errorCount = Math.max(0, CONFIG.state.errorCount - 1);
                         
-                        // Incrémenter le compteur de kudos
+                        // Incrémenter le compteur de kudos avec plus de logs
+                        console.log('[Strava Auto Kudos] Successfully gave kudos in retry to entry:', item.entryId);
                         UI.incrementKudosCount();
+                        console.log('[Strava Auto Kudos] Kudos count after retry increment:', CONFIG.state.kudosCount);
                         
-                        // Afficher une notification de succès
+                        // Afficher une notification de succès avec l'élément kudosButton
                         UI.showSuccessNotification(item.kudosButton);
                     }
                 } catch (error) {
@@ -339,8 +409,8 @@ const KudosManager = {
                     
                     failCount++;
                     
-                    // Afficher une notification d'erreur
-                    UI.showErrorNotification(item.kudosButton);
+                    // Afficher une notification d'erreur sans paramètre
+                    UI.showErrorNotification();
                     
                     // Augmenter le délai en cas d'erreur
                     await Utils.sleep(maxDelay);
