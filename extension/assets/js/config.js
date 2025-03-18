@@ -74,6 +74,9 @@ const CONFIG = {
     }
 };
 
+// Add a setting to toggle debug logs
+CONFIG.debugEnabled = true;
+
 // Exporter la configuration pour l'utiliser dans d'autres modules
 if (typeof module !== 'undefined') {
     module.exports = CONFIG;

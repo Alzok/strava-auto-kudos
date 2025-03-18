@@ -4,54 +4,60 @@
 console.log("[Strava Auto Kudos] Logger module loading");
 
 const Logger = {
-    prefix: '[Strava Auto Kudos]',
-    
-    info: (message) => {
-        console.info(`${Logger.prefix} ${message}`);
+    prefix: "[Strava Auto Kudos]",
+
+    info(msg) {
+        console.info(`${this.prefix} ${msg}`);
     },
-    
-    error: (message, error = null) => {
-        // Si error est null ou undefined, ne pas l'inclure dans le log
+
+    error(msg, error = null) {
         if (error) {
-            console.error(`${Logger.prefix} ${message}`, error);
+            console.error(`${this.prefix} ${msg}`, error);
         } else {
-            console.error(`${Logger.prefix} ${message}`);
+            console.error(`${this.prefix} ${msg}`);
         }
     },
-    
-    debug: (message, data = null) => {
-        // Si data est null ou undefined, ne pas l'inclure dans le log
+
+    debug(msg, data = null) {
         if (data) {
-            console.debug(`${Logger.prefix} ${message}`, data);
+            console.debug(`${this.prefix} ${msg}`, data);
         } else {
-            console.debug(`${Logger.prefix} ${message}`);
+            console.debug(`${this.prefix} ${msg}`);
         }
     },
-    
-    // Ajout de la méthode warn manquante avec la même logique que error
-    warn: (message, data = null) => {
-        // Si data est null ou undefined, ne pas l'inclure dans le log
+
+    warn(msg, data = null) {
         if (data) {
-            console.warn(`${Logger.prefix} ${message}`, data);
+            console.warn(`${this.prefix} ${msg}`, data);
         } else {
-            console.warn(`${Logger.prefix} ${message}`);
+            console.warn(`${this.prefix} ${msg}`);
         }
+    },
+
+    init() {
+        console.log("[Strava Auto Kudos] Logger initialized successfully");
     }
 };
 
 // Ajoutez cette fonction au module Logger
 if (typeof Logger !== 'undefined') {
-    Logger.init = function() {
-        console.log("[Strava Auto Kudos] Logger initialized successfully");
-    };
-    
-    // Appelez immédiatement la fonction d'initialisation
     Logger.init();
 } else {
     console.error("[Strava Auto Kudos] Logger module undefined!");
 }
 
+function debug(...args) {
+    if (CONFIG.debugEnabled) {
+        console.log("[Strava Auto Kudos] DEBUG:", ...args);
+    }
+}
+
 // Exporter le module de logging
 if (typeof module !== 'undefined') {
     module.exports = Logger;
+}
+
+// Exporting extended logger
+if (typeof Logger !== 'undefined') {
+    Logger.debug = debug;
 }
