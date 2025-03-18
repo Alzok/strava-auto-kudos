@@ -142,7 +142,30 @@ const KudosManager = {
                     continue;
                 }
                 
-                // Récupère l'URL du propriétaire de l'entrée - plus robuste
+                // AMÉLIORATIONS POUR DÉTECTER SES PROPRES ACTIVITÉS
+                
+                // 1. Vérifier le titre du bouton - "Afficher tous les kudos" ou "View all kudos" indique votre propre activité
+                const buttonTitle = kudosButton.getAttribute('title') || '';
+                if (buttonTitle.includes('Afficher tous les kudos') || buttonTitle.includes('View all kudos')) {
+                    Logger.debug(`[Auto Kudos] Bouton "Afficher tous les kudos" détecté, ignoré`);
+                    continue;
+                }
+                
+                // 2. Vérifier si le bouton est désactivé
+                if (kudosButton.disabled === true || kudosButton.classList.contains('disabled')) {
+                    Logger.debug(`[Auto Kudos] Bouton désactivé détecté, probablement votre propre activité, ignoré`);
+                    continue;
+                }
+                
+                // 3. Vérifier si le bouton a une classe spécifique aux activités du propriétaire
+                const buttonClasses = Array.from(kudosButton.classList || []);
+                const selfActivityClasses = ['own-activity', 'self-activity', 'user-activity'];
+                if (selfActivityClasses.some(cls => buttonClasses.includes(cls))) {
+                    Logger.debug(`[Auto Kudos] Bouton avec classe d'activité personnelle détecté, ignoré`);
+                    continue;
+                }
+                
+                // Récupère l'URL du propriétaire de l'entrée
                 let ownerNameElement;
                 if (entry.closest(CONFIG.selectors.groupActivityList)) {
                     // Pour les activités groupées
@@ -160,16 +183,75 @@ const KudosManager = {
                 
                 const ownerHref = ownerNameElement.getAttribute('href');
                 
-                // Ne pas donner kudos à ses propres entrées
+                // 4. Ne pas donner kudos à ses propres entrées - vérification de l'URL
                 if (ownerHref === currentUserHref) {
                     Logger.debug('Entrée appartenant à l\'utilisateur courant, ignorée');
                     continue;
                 }
                 
-                // Vérifier si le kudos n'est pas déjà donné
+                // 5. Vérifier si le bouton contient l'icône remplie déjà
+                const filledKudosIcon = kudosButton.querySelector(CONFIG.selectors.filledKudos);
+                if (filledKudosIcon) {
+                    Logger.debug(`Kudos déjà donné ou activité personnelle, ignorée`);
+                    continue;
+                }
+
+                // 6. Vérification par nom d'utilisateur dans l'entrée
+                const currentUserName = userMenuLink.textContent.trim(); 
+                if (currentUserName && currentUserName.length > 3) { // Éviter les faux positifs avec des noms courts
+                    // Recherche plus précise - éviter les faux positifs, chercher le nom exact
+                    const userNameRegExp = new RegExp(`\\b${currentUserName}\\b`, 'i');
+                    const entryText = entry.textContent || '';
+                    
+                    // Vérifier si le nom est présent ET si l'entrée semble être une activité personnelle
+                    if (userNameRegExp.test(entryText) && 
+                        (entryText.includes("a réalisé") || entryText.includes("went") || 
+                         entryText.includes("a effectué") || entryText.includes("vous avez"))) {
+                        Logger.debug(`[Auto Kudos] Activité personnelle détectée via nom d'utilisateur "${currentUserName}", ignorée`);
+                        continue;
+                    }
+                }
+                
+                // 7. Chercher des indicateurs visuels spécifiques aux propres activités
+                const activityOwnerSection = entry.querySelector('.activity-owner');
+                if (activityOwnerSection && activityOwnerSection.classList.contains('self')) {
+                    Logger.debug(`[Auto Kudos] Section propriétaire d'activité personnelle détectée, ignorée`);
+                    continue;
+                }
+                
+                // 8. Vérifier l'état du SVG dans le bouton
+                const iconSVGs = kudosButton.querySelectorAll('svg');
+                let isSelfActivity = false;
+                iconSVGs.forEach(svg => {
+                    // Si l'icône a un attribut particulier ou une apparence distincte
+                    if (svg.dataset && (svg.dataset.testid === "own_kudos" || svg.dataset.testid === "already_kudoed")) {
+                        isSelfActivity = true;
+                    }
+                });
+                
+                if (isSelfActivity) {
+                    Logger.debug(`[Auto Kudos] Icône de kudos personnel détectée dans le SVG, ignorée`);
+                    continue;
+                }
+                
+                // Vérifier si le kudos n'est pas déjà donné (plus restrictif)
                 const unfilledKudosIcon = kudosButton.querySelector(CONFIG.selectors.unfilledKudos);
                 
+                if (!unfilledKudosIcon) {
+                    Logger.debug(`Bouton de kudos sans icône non remplie, probablement déjà donné ou activité personnelle, ignoré`);
+                    continue;
+                }
+                
                 if (unfilledKudosIcon) {
+                    // Essayer de déterminer si c'est une activité personnelle via les attributs du SVG
+                    const iconAttributes = Array.from(unfilledKudosIcon.attributes || []);
+                    if (iconAttributes.some(attr => 
+                        (attr.name === 'data-testid' && attr.value.includes('own')) ||
+                        (attr.name === 'class' && attr.value.includes('self')))) {
+                        Logger.debug(`[Auto Kudos] Icône kudos avec attributs personnels détectée, ignorée`);
+                        continue;
+                    }
+                    
                     try {
                         Logger.debug(`Tentative de kudos pour l'entrée ${entryId}`);
                         
@@ -488,16 +570,82 @@ const KudosManager = {
     }
 };
 
-// Ajout d'une fonction pour détecter et cliquer directement sur chaque icône de kudos non remplie
+// Remplacer la fonction giveKudosByIcon avec une version plus sécurisée
 function giveKudosByIcon() {
-    const unfilledIcons = document.querySelectorAll('svg[data-testid="unfilled_kudos"][fill="currentColor"]');
-    unfilledIcons.forEach((icon) => {
-        const kudosButton = icon.closest('button[data-testid="kudos_button"]');
-        if (kudosButton) {
-            // ...vérifications éventuelles pour ignorer ses propres activités...
-            kudosButton.click();
-        }
-    });
+    try {
+        // Récupérer l'URL du profil de l'utilisateur courant
+        const userMenuLink = document.querySelector(CONFIG.selectors.userMenuLink);
+        if (!userMenuLink) return;
+        const currentUserHref = userMenuLink.getAttribute('href');
+        const currentUserName = userMenuLink.textContent.trim();
+        
+        const unfilledIcons = document.querySelectorAll('svg[data-testid="unfilled_kudos"][fill="currentColor"]');
+        
+        unfilledIcons.forEach((icon) => {
+            try {
+                const kudosButton = icon.closest('button[data-testid="kudos_button"]');
+                if (!kudosButton) return;
+                
+                // Vérification 1: Titre du bouton
+                const buttonTitle = kudosButton.getAttribute('title') || '';
+                if (buttonTitle.includes('Afficher tous les kudos') || buttonTitle.includes('View all kudos')) {
+                    return;
+                }
+                
+                // Vérification 2: Bouton désactivé
+                if (kudosButton.disabled === true) return;
+                
+                // Vérification 3: Classes spécifiques
+                if (kudosButton.classList.contains('disabled') || 
+                    kudosButton.classList.contains('own-activity') || 
+                    kudosButton.classList.contains('self')) {
+                    return;
+                }
+                
+                // Vérification 4: Trouver le container de l'activité
+                let activityEntry = kudosButton.closest('.feed-entry') || 
+                                   kudosButton.closest('.group-activity-item') || 
+                                   kudosButton.closest('[data-testid="feed-entry"]');
+                
+                if (activityEntry) {
+                    // Vérification 5: Chercher le nom du propriétaire
+                    let ownerElement = activityEntry.querySelector('.activity-name') || 
+                                       activityEntry.querySelector('.owner-name') || 
+                                       activityEntry.querySelector('[data-testid="owner-name"]');
+                    
+                    if (ownerElement) {
+                        const ownerLink = ownerElement.querySelector('a') || ownerElement;
+                        const ownerHref = ownerLink.getAttribute('href');
+                        
+                        // Si c'est le même utilisateur, ne pas cliquer
+                        if (ownerHref === currentUserHref) return;
+                    }
+                    
+                    // Vérification 6: Vérifier le texte de l'activité pour le nom d'utilisateur
+                    if (currentUserName && currentUserName.length > 3) {
+                        const userNameRegExp = new RegExp(`\\b${currentUserName}\\b`, 'i');
+                        const entryText = activityEntry.textContent || '';
+                        
+                        if (userNameRegExp.test(entryText) && 
+                            (entryText.includes("a réalisé") || entryText.includes("went") || 
+                             entryText.includes("a effectué") || entryText.includes("vous avez"))) {
+                            return;
+                        }
+                    }
+                }
+                
+                // Toutes les vérifications ont passé, cliquer sur le bouton
+                setTimeout(() => {
+                    kudosButton.click();
+                    console.log('[Strava Auto Kudos] Icon method: Clicked kudos button');
+                }, Math.random() * 500); // Délai aléatoire pour éviter les clics simultanés
+            } catch (err) {
+                console.error('[Strava Auto Kudos] Error in icon processing:', err);
+            }
+        });
+    } catch (err) {
+        console.error('[Strava Auto Kudos] Error in giveKudosByIcon:', err);
+    }
 }
 
 // Exporter le module de gestion des kudos
