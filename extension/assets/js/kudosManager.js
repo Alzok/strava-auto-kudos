@@ -1,676 +1,600 @@
 /**
- * Module pour la gestion des Kudos
+ * Module de gestion des kudos
+ * @module KudosManager
  */
 console.log("[Strava Auto Kudos] KudosManager module loading");
 
-const KudosManager = {
-    /**
-     * Active ou désactive la fonctionnalité Auto Kudos
-     */
-    toggleAutoKudos: () => {
-        Logger.debug('Toggle Auto Kudos called');
-        
-        try {
-            // Inverser l'état actuel
-            CONFIG.state.isEnabled = !CONFIG.state.isEnabled;
-            
-            // Sauvegarder l'état dans localStorage
-            Storage.save(CONFIG.storage.enabled, CONFIG.state.isEnabled);
-            
-            // Mettre à jour l'interface
-            UI.updateBulleStatus(CONFIG.state.isEnabled);
-            
-            if (CONFIG.state.isEnabled) {
-                Logger.info('Auto Kudos activé');
-                // Si activé, on lance immédiatement le processus
-                KudosManager.loopKudos();
-            } else {
-                Logger.info('Auto Kudos désactivé');
+// Vérifier si KudosManager est déjà défini
+if (typeof window.KudosManager === 'undefined') {
+    window.KudosManager = {
+        /**
+         * Configuration du gestionnaire de kudos
+         * @type {Object}
+         */
+        config: {
+            batchSize: 5,
+            minDelay: 100,
+            maxDelay: 300,
+            maxConcurrent: 3,
+            retryDelay: 1000,
+            maxRetries: 3,
+            domCheckInterval: 1000, // Intervalle de vérification du DOM
+            maxDomChecks: 5, // Nombre maximum de vérifications du DOM
+            performance: {
+                maxBatchSize: 10,
+                minBatchSize: 2,
+                batchSizeAdjustment: 1,
+                performanceCheckInterval: 5000,
+                successThreshold: 0.8,
+                errorThreshold: 0.3
+            },
+            errorHandling: {
+                maxConsecutiveErrors: 5,
+                errorCooldown: 30000, // 30 secondes
+                errorTypes: {
+                    DOM: 'DOM_ERROR',
+                    NETWORK: 'NETWORK_ERROR',
+                    RATE_LIMIT: 'RATE_LIMIT_ERROR',
+                    SERVER: 'SERVER_ERROR',
+                    UNKNOWN: 'UNKNOWN_ERROR'
+                },
+                errorSeverity: {
+                    LOW: 1,
+                    MEDIUM: 2,
+                    HIGH: 3,
+                    CRITICAL: 4
+                }
             }
-        } catch (error) {
-            Logger.error('Erreur lors du toggle auto kudos', error);
-        }
-    },
-    
-    /**
-     * Charge plus d'entrées dans le flux en redirigeant vers l'URL avec plus d'entrées
-     */
-    loadMore: () => {
-        Logger.debug('Chargement de plus d\'entrées via URL');
-        
-        try {
-            // Réinitialiser la liste des entrées traitées avant de charger une nouvelle page
-            CONFIG.state.processedEntries.clear();
-            window.location = CONFIG.urls.dashboard;
-        } catch (error) {
-            Logger.error('Erreur lors du chargement de plus d\'entrées', error);
-        }
-    },
-    
-    /**
-     * Donne des kudos aux entrées du flux
-     * Cette fonction sera appelée à chaque chargement initial et à chaque détection de nouvelles entrées
-     */
-    loopKudos: async () => {
-        // Ne pas exécuter si l'extension est désactivée
-        if (!CONFIG.state.isEnabled) {
-            return;
-        }
-        
-        // Éviter les exécutions simultanées
-        if (CONFIG.state.isProcessing) {
-            Logger.debug('Traitement déjà en cours, ignoré');
-            return;
-        }
-        
-        CONFIG.state.isProcessing = true;
-        Logger.debug('Début de la boucle de kudos');
-        
-        try {
-            // Récupère l'URL du profil de l'utilisateur courant
-            const userMenuLink = document.querySelector(CONFIG.selectors.userMenuLink);
+        },
+
+        /**
+         * État des performances
+         * @type {Object}
+         */
+        performanceState: {
+            lastCheck: 0,
+            currentBatchSize: 5,
+            successCount: 0,
+            errorCount: 0,
+            processingTime: 0,
+            isOptimizing: false,
+            consecutiveErrors: 0,
+            lastError: null,
+            errorHistory: [],
+            maxErrorHistory: 10
+        },
+
+        /**
+         * Initialise le gestionnaire de kudos
+         */
+        init() {
+            console.log("[Strava Auto Kudos] Initialisation du gestionnaire de kudos");
             
-            if (!userMenuLink) {
-                Logger.debug('Lien du menu utilisateur non trouvé');
-                CONFIG.state.isProcessing = false;
+            // Vérifier si l'extension est activée
+            if (!StateManager.isEnabled()) {
+                console.log("[Strava Auto Kudos] Extension désactivée, pas de traitement");
                 return;
             }
+
+            // Attendre que le DOM soit chargé
+            if (document.readyState === 'loading') {
+                console.log("[Strava Auto Kudos] DOM en cours de chargement, attente...");
+                document.addEventListener('DOMContentLoaded', () => this.startProcessing());
+            } else {
+                console.log("[Strava Auto Kudos] DOM déjà chargé, démarrage immédiat");
+                this.startProcessing();
+            }
+        },
+
+        async startProcessing() {
+            console.log("[Strava Auto Kudos] Démarrage du traitement");
             
-            const currentUserHref = userMenuLink.getAttribute('href');
-            Logger.debug(`URL de l'utilisateur courant: ${currentUserHref}`);
+            // Attendre que les entrées soient chargées
+            console.log("[Strava Auto Kudos] Attente du chargement des entrées du flux...");
+            await this.waitForDOM();
             
-            // Récupérer d'abord toutes les entrées normales
-            const regularEntries = document.querySelectorAll(CONFIG.selectors.feedEntry);
+            // Démarrer le traitement
+            console.log("[Strava Auto Kudos] Lancement du traitement des entrées");
+            await this.processEntries();
+        },
+
+        /**
+         * Analyse une erreur et détermine son type et sa sévérité
+         * @param {Error} error - L'erreur à analyser
+         * @returns {Object} Informations sur l'erreur
+         */
+        analyzeError(error) {
+            const errorInfo = {
+                type: this.config.errorHandling.errorTypes.UNKNOWN,
+                severity: this.config.errorHandling.errorSeverity.LOW,
+                message: error.message || 'Erreur inconnue',
+                timestamp: Date.now(),
+                retryable: true
+            };
+
+            // Déterminer le type d'erreur
+            if (error.name === 'NetworkError' || error.message.includes('network')) {
+                errorInfo.type = this.config.errorHandling.errorTypes.NETWORK;
+                errorInfo.severity = this.config.errorHandling.errorSeverity.MEDIUM;
+            } else if (error.message.includes('429') || error.message.includes('rate limit')) {
+                errorInfo.type = this.config.errorHandling.errorTypes.RATE_LIMIT;
+                errorInfo.severity = this.config.errorHandling.errorSeverity.HIGH;
+                errorInfo.retryable = false;
+            } else if (error.message.includes('500') || error.message.includes('server')) {
+                errorInfo.type = this.config.errorHandling.errorTypes.SERVER;
+                errorInfo.severity = this.config.errorHandling.errorSeverity.MEDIUM;
+            } else if (error.message.includes('DOM') || error.message.includes('element')) {
+                errorInfo.type = this.config.errorHandling.errorTypes.DOM;
+                errorInfo.severity = this.config.errorHandling.errorSeverity.LOW;
+            }
+
+            return errorInfo;
+        },
+
+        /**
+         * Gère une erreur et met à jour l'état en conséquence
+         * @param {Error} error - L'erreur à gérer
+         * @param {string} context - Le contexte de l'erreur
+         */
+        handleError(error, context) {
+            const errorInfo = this.analyzeError(error);
             
-            // Récupérer ensuite toutes les entrées d'activités groupées
-            const groupedActivities = [];
-            document.querySelectorAll(CONFIG.selectors.groupActivityItem).forEach(item => {
-                groupedActivities.push(item);
+            // Mettre à jour l'historique des erreurs
+            this.performanceState.errorHistory.push(errorInfo);
+            if (this.performanceState.errorHistory.length > this.config.errorHandling.maxErrorHistory) {
+                this.performanceState.errorHistory.shift();
+            }
+
+            // Mettre à jour les compteurs
+            this.performanceState.errorCount++;
+            this.performanceState.consecutiveErrors++;
+            this.performanceState.lastError = errorInfo;
+
+            // Logger l'erreur avec le contexte
+            Logger.error(`Erreur dans ${context}:`, {
+                type: errorInfo.type,
+                severity: errorInfo.severity,
+                message: errorInfo.message,
+                consecutiveErrors: this.performanceState.consecutiveErrors
             });
+
+            // Gérer les erreurs consécutives
+            if (this.performanceState.consecutiveErrors >= this.config.errorHandling.maxConsecutiveErrors) {
+                this.handleConsecutiveErrors();
+            }
+
+            // Émettre un événement d'erreur
+            App.emit('kudosError', {
+                error: errorInfo,
+                context,
+                stats: this.getPerformanceStats()
+            });
+        },
+
+        /**
+         * Gère les erreurs consécutives
+         */
+        handleConsecutiveErrors() {
+            const now = Date.now();
+            const lastErrorTime = this.performanceState.lastError?.timestamp || 0;
             
-            // Combiner toutes les entrées
-            const allEntries = [...regularEntries, ...groupedActivities];
-            
-            Logger.debug(`Nombre total d'entrées dans le flux: ${allEntries.length} (${regularEntries.length}, ${groupedActivities.length} groupées)`);
-            
-            let newEntriesCount = 0;
-            
-            // Déterminer les délais à utiliser
-            const delays = Utils.getCurrentDelays();
-            
-            // Traitement dans l'ordre original des activités (sans randomisation)
-            for (const entry of allEntries) {
-                // Vérifier si l'extension est toujours active
-                if (!CONFIG.state.isEnabled) {
-                    Logger.debug('Extension désactivée pendant le traitement, arrêt de la boucle');
-                    break;
-                }
-                
-                const entryId = entry.id || entry.getAttribute('index') || Math.random().toString();
-                
-                // Ignorer les entrées déjà traitées
-                if (CONFIG.state.processedEntries.has(entryId)) {
-                    continue;
-                }
-                
-                // Marquer l'entrée comme traitée
-                CONFIG.state.processedEntries.add(entryId);
-                newEntriesCount++;
-                
-                // Attendre un temps minimal pour éviter d'être bloqué
-                const delay = CONFIG.state.errorCount > 0 
-                    ? Utils.randomIntFromInterval(delays.min, delays.max) 
-                    : Math.min(50, delays.min); // Délai ultra-court si pas d'erreurs précédentes
-                await Utils.sleep(delay);
-                
-                // Trouver le bouton kudos - méthode plus robuste pour les activités groupées
-                let kudosButton;
-                
-                // Pour les activités groupées, chercher le bouton kudos directement dans l'entrée
-                if (entry.closest(CONFIG.selectors.groupActivityList)) {
-                    kudosButton = entry.querySelector(CONFIG.selectors.kudosButton);
-                    Logger.debug('Entrée groupée détectée, bouton kudos trouvé:', kudosButton ? 'oui' : 'non');
-                } else {
-                    // Pour les entrées normales, méthode standard
-                    kudosButton = entry.querySelector(CONFIG.selectors.kudosButton);
-                    Logger.debug('Entrée normale, bouton kudos trouvé:', kudosButton ? 'oui' : 'non');
-                }
-                
-                // Si on n'a pas trouvé le bouton, on ignore cette entrée
-                if (!kudosButton) {
-                    Logger.debug('Bouton kudos non trouvé dans cette entrée', entry);
-                    continue;
-                }
-                
-                // AMÉLIORATIONS POUR DÉTECTER SES PROPRES ACTIVITÉS
-                
-                // 1. Vérifier le titre du bouton - "Afficher tous les kudos" ou "View all kudos" indique votre propre activité
-                const buttonTitle = kudosButton.getAttribute('title') || '';
-                if (buttonTitle.includes('Afficher tous les kudos') || buttonTitle.includes('View all kudos')) {
-                    Logger.debug(`[Auto Kudos] Bouton "Afficher tous les kudos" détecté, ignoré`);
-                    continue;
-                }
-                
-                // 2. Vérifier si le bouton est désactivé
-                if (kudosButton.disabled === true || kudosButton.classList.contains('disabled')) {
-                    Logger.debug(`[Auto Kudos] Bouton désactivé détecté, probablement votre propre activité, ignoré`);
-                    continue;
-                }
-                
-                // 3. Vérifier si le bouton a une classe spécifique aux activités du propriétaire
-                const buttonClasses = Array.from(kudosButton.classList || []);
-                const selfActivityClasses = ['own-activity', 'self-activity', 'user-activity'];
-                if (selfActivityClasses.some(cls => buttonClasses.includes(cls))) {
-                    Logger.debug(`[Auto Kudos] Bouton avec classe d'activité personnelle détecté, ignoré`);
-                    continue;
-                }
-                
-                // Récupère l'URL du propriétaire de l'entrée
-                let ownerNameElement;
-                if (entry.closest(CONFIG.selectors.groupActivityList)) {
-                    // Pour les activités groupées
-                    ownerNameElement = entry.querySelector(CONFIG.selectors.ownerName);
-                } else {
-                    // Pour les entrées normales
-                    ownerNameElement = entry.querySelector(CONFIG.selectors.ownerName) || 
-                                      entry.closest(CONFIG.selectors.feedEntry)?.querySelector(CONFIG.selectors.ownerName);
-                }
-                
-                if (!ownerNameElement) {
-                    Logger.debug('Élément nom du propriétaire non trouvé dans cette entrée', entry);
-                    continue;
-                }
-                
-                const ownerHref = ownerNameElement.getAttribute('href');
-                
-                // 4. Ne pas donner kudos à ses propres entrées - vérification de l'URL
-                if (ownerHref === currentUserHref) {
-                    Logger.debug('Entrée appartenant à l\'utilisateur courant, ignorée');
-                    continue;
-                }
-                
-                // 5. Vérifier si le bouton contient l'icône remplie déjà
-                const filledKudosIcon = kudosButton.querySelector(CONFIG.selectors.filledKudos);
-                if (filledKudosIcon) {
-                    Logger.debug(`Kudos déjà donné ou activité personnelle, ignorée`);
-                    continue;
+            // Si on est dans la période de cooldown, on met en pause
+            if (now - lastErrorTime < this.config.errorHandling.errorCooldown) {
+                const pauseDuration = this.config.errorHandling.errorCooldown;
+                StateManager.pause(pauseDuration);
+                NotificationManager.showError(`Trop d'erreurs consécutives. Pause de ${Utils.formatDuration(pauseDuration)}`);
+            }
+
+            // Réduire la taille du batch
+            this.performanceState.currentBatchSize = Math.max(
+                this.config.performance.minBatchSize,
+                this.performanceState.currentBatchSize - this.config.performance.batchSizeAdjustment
+            );
+        },
+
+        /**
+         * Réinitialise le compteur d'erreurs consécutives
+         */
+        resetConsecutiveErrors() {
+            this.performanceState.consecutiveErrors = 0;
+            this.performanceState.lastError = null;
+        },
+
+        /**
+         * Récupère les statistiques de performance
+         * @returns {Object} Les statistiques
+         */
+        getPerformanceStats() {
+            return {
+                successCount: this.performanceState.successCount,
+                errorCount: this.performanceState.errorCount,
+                consecutiveErrors: this.performanceState.consecutiveErrors,
+                currentBatchSize: this.performanceState.currentBatchSize,
+                processingTime: this.performanceState.processingTime,
+                errorHistory: [...this.performanceState.errorHistory]
+            };
+        },
+
+        /**
+         * Active ou désactive les kudos automatiques
+         * @param {boolean} enabled - L'état souhaité
+         */
+        async toggleAutoKudos(enabled) {
+            try {
+                // Si on désactive, on arrête immédiatement
+                if (!enabled) {
+                    StateManager.setEnabled(false);
+                    return;
                 }
 
-                // 6. Vérification par nom d'utilisateur dans l'entrée
-                const currentUserName = userMenuLink.textContent.trim(); 
-                if (currentUserName && currentUserName.length > 3) { // Éviter les faux positifs avec des noms courts
-                    // Recherche plus précise - éviter les faux positifs, chercher le nom exact
-                    const userNameRegExp = new RegExp(`\\b${currentUserName}\\b`, 'i');
-                    const entryText = entry.textContent || '';
-                    
-                    // Vérifier si le nom est présent ET si l'entrée semble être une activité personnelle
-                    if (userNameRegExp.test(entryText) && 
-                        (entryText.includes("a réalisé") || entryText.includes("went") || 
-                         entryText.includes("a effectué") || entryText.includes("vous avez"))) {
-                        Logger.debug(`[Auto Kudos] Activité personnelle détectée via nom d'utilisateur "${currentUserName}", ignorée`);
-                        continue;
-                    }
+                // Si on active, on vérifie d'abord l'état de pause
+                if (StateManager.isPaused()) {
+                    Logger.info('Extension en pause, activation différée');
+                    return;
+                }
+
+                // Vérifier la connexion réseau
+                if (!await NetworkManager.checkConnection()) {
+                    Logger.warn('Pas de connexion réseau, activation impossible');
+                    NotificationManager.showError('Pas de connexion réseau');
+                    return;
+                }
+
+                // Vérifier que le DOM est prêt
+                if (!await this.waitForDOM()) {
+                    Logger.warn('DOM non prêt, activation impossible');
+                    NotificationManager.showError('Page non chargée correctement');
+                    return;
+                }
+
+                StateManager.setEnabled(true);
+                await this.loopKudos();
+            } catch (error) {
+                Logger.error('Erreur lors de l\'activation des kudos:', error);
+                StateManager.handleError(error, 'toggle auto kudos');
+                NotificationManager.showError('Erreur lors de l\'activation des kudos');
+            }
+        },
+
+        /**
+         * Attend que le DOM soit prêt
+         * @returns {Promise<boolean>} true si le DOM est prêt
+         */
+        async waitForDOM() {
+            let checks = 0;
+            const maxChecks = 20; // Augmenter le nombre de vérifications
+            const checkInterval = 500; // Réduire l'intervalle pour des vérifications plus fréquentes
+
+            console.log("[Strava Auto Kudos] Attente du chargement des entrées du flux...");
+            
+            while (checks < maxChecks) {
+                const entries = DOMManager.getFeedEntries();
+                if (entries && entries.length > 0) {
+                    console.log(`[Strava Auto Kudos] ${entries.length} entrées trouvées`);
+                    return true;
                 }
                 
-                // 7. Chercher des indicateurs visuels spécifiques aux propres activités
-                const activityOwnerSection = entry.querySelector('.activity-owner');
-                if (activityOwnerSection && activityOwnerSection.classList.contains('self')) {
-                    Logger.debug(`[Auto Kudos] Section propriétaire d'activité personnelle détectée, ignorée`);
-                    continue;
-                }
-                
-                // 8. Vérifier l'état du SVG dans le bouton
-                const iconSVGs = kudosButton.querySelectorAll('svg');
-                let isSelfActivity = false;
-                iconSVGs.forEach(svg => {
-                    // Si l'icône a un attribut particulier ou une apparence distincte
-                    if (svg.dataset && (svg.dataset.testid === "own_kudos" || svg.dataset.testid === "already_kudoed")) {
-                        isSelfActivity = true;
+                console.log("[Strava Auto Kudos] Aucune entrée trouvée, nouvelle tentative...");
+                await Utils.sleep(checkInterval);
+                checks++;
+            }
+            
+            console.warn("[Strava Auto Kudos] Timeout en attendant le chargement des entrées");
+            return false;
+        },
+
+        /**
+         * Charge plus d'entrées dans le flux
+         * @returns {Promise<boolean>} true si de nouvelles entrées ont été chargées
+         */
+        async loadMore() {
+            if (!StateManager.isEnabled() || StateManager.isPaused()) return false;
+
+            try {
+                return await NetworkManager.retryWithBackoff(async () => {
+                    const feedContainer = DOMManager.getFeedContainer();
+                    if (!feedContainer) {
+                        Logger.warn('Conteneur du flux non trouvé');
+                        return false;
                     }
+
+                    const scrollHeight = feedContainer.scrollHeight;
+                    feedContainer.scrollTo(0, scrollHeight);
+                    await Utils.sleep(1000);
+
+                    const newScrollHeight = feedContainer.scrollHeight;
+                    if (newScrollHeight <= scrollHeight) {
+                        Logger.debug('Aucune nouvelle entrée chargée');
+                        return false;
+                    }
+
+                    Logger.debug('Nouvelles entrées chargées');
+                    return true;
                 });
-                
-                if (isSelfActivity) {
-                    Logger.debug(`[Auto Kudos] Icône de kudos personnel détectée dans le SVG, ignorée`);
-                    continue;
-                }
-                
-                // Vérifier si le kudos n'est pas déjà donné (plus restrictif)
-                const unfilledKudosIcon = kudosButton.querySelector(CONFIG.selectors.unfilledKudos);
-                
-                if (!unfilledKudosIcon) {
-                    Logger.debug(`Bouton de kudos sans icône non remplie, probablement déjà donné ou activité personnelle, ignoré`);
-                    continue;
-                }
-                
-                if (unfilledKudosIcon) {
-                    // Essayer de déterminer si c'est une activité personnelle via les attributs du SVG
-                    const iconAttributes = Array.from(unfilledKudosIcon.attributes || []);
-                    if (iconAttributes.some(attr => 
-                        (attr.name === 'data-testid' && attr.value.includes('own')) ||
-                        (attr.name === 'class' && attr.value.includes('self')))) {
-                        Logger.debug(`[Auto Kudos] Icône kudos avec attributs personnels détectée, ignorée`);
-                        continue;
-                    }
-                    
-                    try {
-                        Logger.debug(`Tentative de kudos pour l'entrée ${entryId}`);
-                        
-                        // Approche ultra-rapide pour cliquer sur le bouton
-                        try {
-                            // Clic direct sans événements complexes pour maximiser la vitesse
-                            kudosButton.click();
-                            console.log('[Strava Auto Kudos] Clicked kudos button directly:', kudosButton);
-                        } catch (e) {
-                            // En cas d'échec, essayer avec un événement MouseEvent plus complet
-                            const clickEvent = new MouseEvent('click', {
-                                bubbles: true,
-                                cancelable: true,
-                                view: window
-                            });
-                            kudosButton.dispatchEvent(clickEvent);
-                            console.log('[Strava Auto Kudos] Used dispatchEvent for click fallback');
-                        }
-                        
-                        // Vérification très rapide si l'action a réussi
-                        await Utils.sleep(100); // Très court délai de vérification
-                        
-                        // Vérifier si le bouton a changé d'état
-                        const stillUnfilled = kudosButton.querySelector(CONFIG.selectors.unfilledKudos);
-                        
-                        // CORRECTION: tenir compte du bouton qui devient disabled dès le clic direct
-                        if (!stillUnfilled || kudosButton.disabled) {
-                            KudosManager.handleSuccessfulKudos(entryId, kudosButton);
-                        } else {
-                            await Utils.sleep(200);
-                            const stillUnfilledSecondCheck = kudosButton.querySelector(CONFIG.selectors.unfilledKudos);
-                            if (stillUnfilledSecondCheck && !kudosButton.disabled) {
-                                // Vraiment en échec, ajouter à la liste des entrées à réessayer
-                                Logger.debug(`Échec du kudos pour l'entrée ${entryId}`);
-                                
-                                CONFIG.state.failedKudos.push({
-                                    entryId,
-                                    kudosButton,
-                                    attempts: 1,
-                                    timestamp: Date.now()
-                                });
-                                
-                                CONFIG.state.errorCount++;
-                                
-                                // Si trop d'erreurs, ralentir considérablement
-                                if (CONFIG.state.errorCount > 5) {
-                                    Logger.info('Trop d\'erreurs détectées, ralentissement significatif');
-                                    // Afficher l'alerte de limite dépassée
-                                    UI.showLimitExceededAlert();
-                                    await Utils.sleep(1000); // Pause marquée
-                                }
-                            } else {
-                                // Finalement réussi après une attente plus longue
-                                KudosManager.handleSuccessfulKudos(entryId, kudosButton);
-                            }
-                        }
-                    } catch (clickError) {
-                        // Erreur lors du clic, possible erreur 429
-                        Logger.error('Erreur lors du clic sur le bouton kudos', clickError);
-                        
-                        CONFIG.state.errorCount++;
-                        
-                        // Afficher une notification d'erreur sans paramètre
-                        UI.showErrorNotification();
-                        
-                        // Ajouter l'entrée à réessayer plus tard
-                        CONFIG.state.failedKudos.push({
-                            entryId,
-                            kudosButton,
-                            attempts: 1,
-                            timestamp: Date.now()
-                        });
-                        
-                        // Si trop d'erreurs, on fait une pause
-                        if (CONFIG.state.errorCount > 5) {
-                            Logger.info('Trop d\'erreurs détectées, pause temporaire');
-                            // Afficher l'alerte de limite dépassée
-                            UI.showLimitExceededAlert();
-                            break;
-                        }
-                    }
-                } else {
-                    Logger.debug(`Kudos déjà donné pour l'entrée ${entryId}`);
-                }
+            } catch (error) {
+                Logger.error('Erreur lors du chargement des entrées:', error);
+                return false;
             }
-            
-            Logger.info(`Processus terminé, ${newEntriesCount} nouvelles entrées traitées`);
-            
-            // Planifier une tentative de traitement des kudos en échec si nécessaire
-            if (CONFIG.state.failedKudos.length > 0 && !CONFIG.state.retryActive) {
-                KudosManager.scheduleRetry();
-            }
-        } catch (error) {
-            Logger.error('Erreur lors de la boucle de kudos', error);
-            CONFIG.state.errorCount++;
-        } finally {
-            CONFIG.state.isProcessing = false;
-        }
+        },
 
-        // Exemple d'appel depuis loopKudos ou après son exécution
-        giveKudosByIcon();
-    },
-    
-    /**
-     * Fonction utilitaire pour traiter un kudos réussi
-     * @param {string} entryId - ID de l'entrée
-     * @param {HTMLElement} kudosButton - Bouton kudos
-     */
-    handleSuccessfulKudos: (entryId, kudosButton) => {
-        // Kudos réussi, réinitialiser le compteur d'erreurs
-        CONFIG.state.errorCount = Math.max(0, CONFIG.state.errorCount - 1);
-        
-        // Suivre les statistiques pour l'auto-optimisation
-        CONFIG.state.kudosAttempts = (CONFIG.state.kudosAttempts || 0) + 1;
-        CONFIG.state.kudosSuccesses = (CONFIG.state.kudosSuccesses || 0) + 1;
-        
-        // CORRECTION: Ajouter vérification et logs
-        console.log('[Strava Auto Kudos] Starting handleSuccessfulKudos for entry:', entryId);
-        console.log('[Strava Auto Kudos] Current kudos count before increment:', CONFIG.state.kudosCount);
-        
-        // CORRECTION: Forcer la mise à jour du compteur et l'animation
-        UI.incrementKudosCount();
-        
-        // CORRECTION: Ajouter un délai pour l'animation pour qu'elle ne se chevauche pas avec l'incrémentation
-        setTimeout(() => {
-            console.log('[Strava Auto Kudos] Triggering success notification');
-            UI.showSuccessNotification(kudosButton);
-        }, 100);
-        
-        // Vérifier que le compteur a bien été incrémenté
-        console.log('[Strava Auto Kudos] Current kudos count after increment:', CONFIG.state.kudosCount);
-        
-        // CORRECTION: Forcer une deuxième vérification du compteur après un délai
-        setTimeout(() => {
-            console.log('[Strava Auto Kudos] Final kudos count check:', CONFIG.state.kudosCount);
-            // Vérifier visuellement le compteur DOM
-            const counter = document.querySelector(`#strava-auto-kudos-container .${CONFIG.classes.counter}`);
-            if (counter) {
-                console.log('[Strava Auto Kudos] DOM counter value:', counter.textContent);
+        /**
+         * Traite les entrées par lots
+         * @param {Array<Element>} entries - Les entrées à traiter
+         * @returns {Promise<void>}
+         */
+        async processBatch(entries) {
+            if (!entries.length) return { success: true, processed: 0 };
+
+            const startTime = Date.now();
+            const batchSize = Math.min(this.performanceState.currentBatchSize, entries.length);
+            const batch = entries.slice(0, batchSize);
+            const results = [];
+            let successCount = 0;
+
+            // Traiter les entrées en parallèle avec un délai entre chaque
+            for (const entry of batch) {
+                if (!StateManager.isEnabled() || StateManager.isPaused()) break;
+
+                const entryId = this.getEntryId(entry);
+                if (StateManager.hasProcessed(entryId)) continue;
+
+                try {
+                    const result = await this.processEntry(entry);
+                    results.push(result);
+                    if (result) successCount++;
+                } catch (error) {
+                    results.push(false);
+                    console.error('Erreur lors du traitement de l\'entrée:', error);
+                }
+
+                // Ajouter un délai entre chaque entrée
+                await Utils.sleep(Utils.randomIntFromInterval(
+                    StateManager.state.delays.min,
+                    StateManager.state.delays.max
+                ));
             }
-        }, 500);
-    },
-    
-    /**
-     * Planifie un réessai pour les kudos échoués
-     */
-    scheduleRetry: () => {
-        if (CONFIG.state.retryActive || CONFIG.state.failedKudos.length === 0) {
-            return;
-        }
-        
-        // Marquer comme actif pour éviter les doublons
-        CONFIG.state.retryActive = true;
-        
-        // Attendre plus longtemps si on a détecté beaucoup d'erreurs
-        const delay = CONFIG.state.errorCount > 5 ? CONFIG.kudosDelay.recoveryDelay : CONFIG.kudosDelay.backoffMax * 2;
-        
-        Logger.debug(`Planification d'un réessai dans ${delay}ms pour ${CONFIG.state.failedKudos.length} kudos`);
-        
-        setTimeout(() => {
-            KudosManager.retryFailedKudos();
-        }, delay);
-    },
-    
-    /**
-     * Réessaie les kudos qui ont échoué précédemment
-     */
-    retryFailedKudos: async () => {
-        CONFIG.state.retryActive = true;
-        
-        try {
-            Logger.debug(`Tentative de réessai pour ${CONFIG.state.failedKudos.length} kudos`);
-            
-            if (CONFIG.state.failedKudos.length === 0 || !CONFIG.state.isEnabled) {
-                CONFIG.state.retryActive = false;
+
+            // Mettre à jour les métriques de performance
+            const processingTime = Date.now() - startTime;
+            this.updatePerformanceMetrics(successCount > 0, processingTime);
+
+            return {
+                success: true,
+                processed: results.length,
+                successCount,
+                results
+            };
+        },
+
+        /**
+         * Traite une entrée individuelle
+         * @param {Element} entry - L'entrée à traiter
+         * @returns {Promise<boolean>} true si le traitement a réussi
+         */
+        async processEntry(entry) {
+            try {
+                console.log("[Strava Auto Kudos] Début du traitement d'une entrée");
+                
+                // Récupérer le bouton kudos avec le sélecteur data-testid
+                const kudosButton = entry.querySelector('button[data-testid="kudos_button"]');
+                if (!kudosButton) {
+                    console.log("[Strava Auto Kudos] Bouton kudos non trouvé dans l'entrée");
+                    throw new Error('Bouton kudos non trouvé');
+                }
+
+                console.log("[Strava Auto Kudos] Bouton kudos trouvé, analyse détaillée:");
+                console.log("[Strava Auto Kudos] Classes du bouton:", kudosButton.className);
+                console.log("[Strava Auto Kudos] Attributs du bouton:", {
+                    disabled: kudosButton.disabled,
+                    title: kudosButton.getAttribute('title'),
+                    dataTestId: kudosButton.getAttribute('data-testid')
+                });
+
+                // Vérifier si déjà kudos en cherchant l'icône remplie
+                const filledKudos = kudosButton.querySelector('svg[data-testid="filled_kudos"]');
+                if (filledKudos) {
+                    console.log("[Strava Auto Kudos] Kudos déjà donné pour cette entrée (icône remplie trouvée)");
+                    return true;
+                }
+
+                // Vérifier si le bouton est cliquable
+                if (!this.isButtonClickable(kudosButton)) {
+                    console.log("[Strava Auto Kudos] Bouton non cliquable (peut-être hors de l'écran ou masqué)");
+                    throw new Error('Bouton non cliquable');
+                }
+
+                console.log("[Strava Auto Kudos] Tentative de clic sur le bouton kudos");
+                // Simuler le clic sur le bouton
+                kudosButton.click();
+
+                // Attendre la confirmation avec timeout
+                console.log("[Strava Auto Kudos] Attente de la confirmation du kudos");
+                const success = await this.waitForKudosConfirmation(kudosButton);
+                if (success) {
+                    console.log("[Strava Auto Kudos] Kudos confirmé avec succès");
+                    return true;
+                }
+
+                console.log("[Strava Auto Kudos] Échec de la confirmation du kudos");
+                return false;
+            } catch (error) {
+                console.error("[Strava Auto Kudos] Erreur lors du traitement de l'entrée:", error);
+                return false;
+            }
+        },
+
+        /**
+         * Met à jour les métriques de performance
+         * @param {boolean} success - Si le traitement a réussi
+         * @param {number} processingTime - Temps de traitement en ms
+         */
+        updatePerformanceMetrics(success, processingTime) {
+            const now = Date.now();
+            if (success) {
+                this.performanceState.successCount++;
+            } else {
+                this.performanceState.errorCount++;
+            }
+            this.performanceState.processingTime += processingTime;
+
+            if (now - this.performanceState.lastCheck >= this.config.performance.performanceCheckInterval) {
+                this.optimizeBatchSize();
+                this.performanceState.lastCheck = now;
+                this.performanceState.successCount = 0;
+                this.performanceState.errorCount = 0;
+                this.performanceState.processingTime = 0;
+            }
+        },
+
+        /**
+         * Optimise la taille des lots en fonction des performances
+         */
+        optimizeBatchSize() {
+            if (this.performanceState.isOptimizing) return;
+            this.performanceState.isOptimizing = true;
+
+            const totalAttempts = this.performanceState.successCount + this.performanceState.errorCount;
+            if (totalAttempts < 10) {
+                this.performanceState.isOptimizing = false;
                 return;
             }
-            
-            const now = Date.now();
-            const delays = Utils.getCurrentDelays();
-            const maxDelay = delays.max * 2; // Délai plus long pour les réessais
-            
-            // Copier la liste pour éviter les problèmes de modification pendant l'itération
-            const failedKudos = [...CONFIG.state.failedKudos];
-            CONFIG.state.failedKudos = [];
-            
-            let successCount = 0;
-            let failCount = 0;
-            
-            for (const item of failedKudos) {
-                // Vérifier si l'extension est toujours active
-                if (!CONFIG.state.isEnabled) {
-                    // Remettre les éléments non traités dans la file d'attente
-                    CONFIG.state.failedKudos.push(...failedKudos.slice(failedKudos.indexOf(item)));
-                    break;
-                }
-                
-                try {
-                    // Vérifier si le bouton est toujours valide
-                    if (!document.body.contains(item.kudosButton)) {
-                        Logger.debug(`Bouton kudos non trouvé pour l'entrée ${item.entryId}, probablement page rechargée`);
-                        continue;
-                    }
-                    
-                    // Vérifier si le kudos n'a pas déjà été donné entre temps
-                    const unfilledKudosIcon = item.kudosButton.querySelector(CONFIG.selectors.unfilledKudos);
-                    
-                    if (!unfilledKudosIcon) {
-                        Logger.debug(`Kudos déjà donné pour l'entrée ${item.entryId}`);
-                        successCount++;
-                        continue;
-                    }
-                    
-                    // Attendre un délai aléatoire
-                    await Utils.sleep(Utils.randomIntFromInterval(delays.min, maxDelay));
-                    
-                    // Tenter à nouveau de donner le kudos
-                    item.kudosButton.click();
-                    
-                    // Attendre pour vérifier si l'action a réussi
-                    await Utils.sleep(200);
-                    
-                    // Vérifier à nouveau
-                    const stillUnfilled = item.kudosButton.querySelector(CONFIG.selectors.unfilledKudos);
-                    
-                    if (stillUnfilled) {
-                        // Toujours en échec
-                        item.attempts++;
-                        item.timestamp = now;
-                        
-                        if (item.attempts < 5) {
-                            // Remettre dans la file d'attente si moins de 5 tentatives
-                            CONFIG.state.failedKudos.push(item);
-                        }
-                        
-                        failCount++;
-                        
-                        // Afficher une notification d'erreur sans paramètre
-                        UI.showErrorNotification();
-                    } else {
-                        // Kudos réussi
-                        successCount++;
-                        CONFIG.state.errorCount = Math.max(0, CONFIG.state.errorCount - 1);
-                        
-                        // CORRECTION: Logs plus détaillés
-                        console.log('[Strava Auto Kudos] Successfully gave kudos in retry to entry:', item.entryId);
-                        
-                        // CORRECTION: Forcer une animation directement ici
-                        UI.createKudosAnimation(item.kudosButton);
-                        
-                        // Incrémenter le compteur séparément
-                        UI.incrementKudosCount();
-                        console.log('[Strava Auto Kudos] Kudos count after retry increment:', CONFIG.state.kudosCount);
-                        
-                        // CORRECTION: Ajouter un délai pour l'animation pour qu'elle ne se chevauche pas
-                        setTimeout(() => {
-                            UI.showSuccessNotification(item.kudosButton);
-                        }, 100);
-                    }
-                } catch (error) {
-                    Logger.error(`Erreur lors de la tentative de réessai pour l'entrée ${item.entryId}`, error);
-                    
-                    if (item.attempts < 5) {
-                        item.attempts++;
-                        item.timestamp = now;
-                        CONFIG.state.failedKudos.push(item);
-                    }
-                    
-                    failCount++;
-                    
-                    // Afficher une notification d'erreur sans paramètre
-                    UI.showErrorNotification();
-                    
-                    // Augmenter le délai en cas d'erreur
-                    await Utils.sleep(maxDelay);
-                }
-            }
-            
-            Logger.info(`Réessais terminés: ${successCount} réussis, ${failCount} échoués`);
-            
-            // Si des échecs subsistent, planifier un autre réessai
-            if (CONFIG.state.failedKudos.length > 0) {
-                if (CONFIG.state.errorCount > 5) {
-                    // Afficher l'alerte de limite dépassée
-                    UI.showLimitExceededAlert();
-                }
-                setTimeout(() => {
-                    CONFIG.state.retryActive = false;
-                    KudosManager.scheduleRetry();
-                }, CONFIG.state.errorCount > 5 ? CONFIG.kudosDelay.recoveryDelay : CONFIG.kudosDelay.backoffMax * 3);
-            } else {
-                CONFIG.state.retryActive = false;
-            }
-        } catch (error) {
-            Logger.error('Erreur lors du réessai des kudos', error);
-            CONFIG.state.retryActive = false;
-        }
-    },
-    
-    /**
-     * Gestionnaire d'événement de défilement
-     * Détecte quand l'utilisateur est proche du bas de la page et traite les nouvelles entrées
-     */
-    handleScroll: () => {
-        // Utiliser un debounce pour éviter des appels trop fréquents
-        if (CONFIG.state.scrollTimeout) {
-            clearTimeout(CONFIG.state.scrollTimeout);
-        }
-        
-        CONFIG.state.scrollTimeout = setTimeout(() => {
-            if (Utils.isNearBottom() && CONFIG.state.isEnabled) {
-                Logger.debug('Bas de page détecté, recherche de nouvelles entrées');
-                KudosManager.loopKudos();
-            }
-        }, 200);
-    }
-};
 
-// Remplacer la fonction giveKudosByIcon avec une version plus sécurisée
-function giveKudosByIcon() {
-    try {
-        // Récupérer l'URL du profil de l'utilisateur courant
-        const userMenuLink = document.querySelector(CONFIG.selectors.userMenuLink);
-        if (!userMenuLink) return;
-        const currentUserHref = userMenuLink.getAttribute('href');
-        const currentUserName = userMenuLink.textContent.trim();
-        
-        const unfilledIcons = document.querySelectorAll('svg[data-testid="unfilled_kudos"][fill="currentColor"]');
-        
-        unfilledIcons.forEach((icon) => {
+            const successRate = this.performanceState.successCount / totalAttempts;
+            const avgProcessingTime = this.performanceState.processingTime / totalAttempts;
+
+            if (successRate >= this.config.performance.successThreshold && avgProcessingTime < 1000) {
+                // Augmenter la taille du lot si les performances sont bonnes
+                this.performanceState.currentBatchSize = Math.min(
+                    this.performanceState.currentBatchSize + this.config.performance.batchSizeAdjustment,
+                    this.config.performance.maxBatchSize
+                );
+                Logger.debug(`Performance optimale, augmentation de la taille du lot à ${this.performanceState.currentBatchSize}`);
+            } else if (successRate <= this.config.performance.errorThreshold || avgProcessingTime > 2000) {
+                // Réduire la taille du lot si les performances sont mauvaises
+                this.performanceState.currentBatchSize = Math.max(
+                    this.performanceState.currentBatchSize - this.config.performance.batchSizeAdjustment,
+                    this.config.performance.minBatchSize
+                );
+                Logger.debug(`Performance dégradée, réduction de la taille du lot à ${this.performanceState.currentBatchSize}`);
+            }
+
+            this.performanceState.isOptimizing = false;
+        },
+
+        /**
+         * Gère l'événement de défilement
+         */
+        handleScroll: Utils.debounce(async () => {
+            if (!StateManager.isEnabled() || StateManager.isPaused()) return;
+            
             try {
-                const kudosButton = icon.closest('button[data-testid="kudos_button"]');
-                if (!kudosButton) return;
-                
-                // Vérification 1: Titre du bouton
-                const buttonTitle = kudosButton.getAttribute('title') || '';
-                if (buttonTitle.includes('Afficher tous les kudos') || buttonTitle.includes('View all kudos')) {
+                const feedContainer = DOMManager.getFeedContainer();
+                if (!feedContainer) {
+                    Logger.warn('Conteneur du flux non trouvé lors du défilement');
                     return;
                 }
-                
-                // Vérification 2: Bouton désactivé
-                if (kudosButton.disabled === true) return;
-                
-                // Vérification 3: Classes spécifiques
-                if (kudosButton.classList.contains('disabled') || 
-                    kudosButton.classList.contains('own-activity') || 
-                    kudosButton.classList.contains('self')) {
-                    return;
+
+                const { scrollTop, scrollHeight, clientHeight } = feedContainer;
+                if (scrollHeight - scrollTop - clientHeight < 100) {
+                    await KudosManager.loadMore();
                 }
-                
-                // Vérification 4: Trouver le container de l'activité
-                let activityEntry = kudosButton.closest('.feed-entry') || 
-                                   kudosButton.closest('.group-activity-item') || 
-                                   kudosButton.closest('[data-testid="feed-entry"]');
-                
-                if (activityEntry) {
-                    // Vérification 5: Chercher le nom du propriétaire
-                    let ownerElement = activityEntry.querySelector('.activity-name') || 
-                                       activityEntry.querySelector('.owner-name') || 
-                                       activityEntry.querySelector('[data-testid="owner-name"]');
-                    
-                    if (ownerElement) {
-                        const ownerLink = ownerElement.querySelector('a') || ownerElement;
-                        const ownerHref = ownerLink.getAttribute('href');
-                        
-                        // Si c'est le même utilisateur, ne pas cliquer
-                        if (ownerHref === currentUserHref) return;
-                    }
-                    
-                    // Vérification 6: Vérifier le texte de l'activité pour le nom d'utilisateur
-                    if (currentUserName && currentUserName.length > 3) {
-                        const userNameRegExp = new RegExp(`\\b${currentUserName}\\b`, 'i');
-                        const entryText = activityEntry.textContent || '';
-                        
-                        if (userNameRegExp.test(entryText) && 
-                            (entryText.includes("a réalisé") || entryText.includes("went") || 
-                             entryText.includes("a effectué") || entryText.includes("vous avez"))) {
-                            return;
-                        }
-                    }
-                }
-                
-                // Toutes les vérifications ont passé, cliquer sur le bouton
-                setTimeout(() => {
-                    kudosButton.click();
-                    console.log('[Strava Auto Kudos] Icon method: Clicked kudos button');
-                }, Math.random() * 500); // Délai aléatoire pour éviter les clics simultanés
-            } catch (err) {
-                console.error('[Strava Auto Kudos] Error in icon processing:', err);
+            } catch (error) {
+                Logger.error('Erreur lors du défilement:', error);
             }
-        });
-    } catch (err) {
-        console.error('[Strava Auto Kudos] Error in giveKudosByIcon:', err);
-    }
+        }, 500),
+
+        /**
+         * Boucle principale de traitement des kudos
+         */
+        async loopKudos() {
+            if (!StateManager.isEnabled() || StateManager.isPaused()) return;
+
+            try {
+                StateManager.setProcessing(true);
+                const entries = Array.from(DOMManager.getFeedEntries())
+                    .filter(entry => EntryProcessor.isValidEntry(entry));
+                
+                if (entries.length === 0) {
+                    Logger.info('Aucune entrée valide trouvée');
+                    return;
+                }
+
+                Logger.info(`${entries.length} entrées valides trouvées`);
+                
+                for (let i = 0; i < entries.length; i += this.performanceState.currentBatchSize) {
+                    // Vérifier l'état de pause à chaque lot
+                    if (StateManager.isPaused()) {
+                        Logger.info('Traitement mis en pause');
+                        break;
+                    }
+
+                    // Vérifier la connexion réseau
+                    if (!await NetworkManager.checkConnection()) {
+                        Logger.warn('Connexion réseau perdue, pause du traitement');
+                        StateManager.pause(30000); // Pause de 30 secondes
+                        break;
+                    }
+
+                    const batch = entries.slice(i, i + this.performanceState.currentBatchSize);
+                    await this.processBatch(batch);
+                }
+            } catch (error) {
+                Logger.error('Erreur lors du traitement des kudos:', error);
+                StateManager.handleError(error, 'envoi des kudos');
+                NotificationManager.showError('Erreur lors du traitement des kudos');
+            } finally {
+                StateManager.setProcessing(false);
+            }
+        },
+
+        async processEntries() {
+            console.log("[Strava Auto Kudos] Début du traitement des entrées");
+            
+            if (!StateManager.isEnabled()) {
+                console.log("[Strava Auto Kudos] Extension désactivée, arrêt du traitement");
+                return;
+            }
+
+            if (StateManager.isPaused()) {
+                console.log("[Strava Auto Kudos] Extension en pause, arrêt du traitement");
+                return;
+            }
+
+            const entries = DOMManager.getFeedEntries();
+            console.log(`[Strava Auto Kudos] ${entries.length} entrées trouvées à traiter`);
+
+            if (!entries.length) {
+                console.log("[Strava Auto Kudos] Aucune entrée à traiter");
+                return;
+            }
+
+            try {
+                // Utiliser EntryProcessor pour traiter les entrées
+                const result = await EntryProcessor.processBatch(Array.from(entries));
+                console.log(`[Strava Auto Kudos] Résultat du traitement:`, {
+                    traitées: result.processed,
+                    réussies: result.successCount,
+                    total: entries.length
+                });
+
+                // Mettre à jour le compteur
+                if (result.successCount > 0) {
+                    const newCount = StateManager.state.kudosCount + result.successCount;
+                    StateManager.updateKudosCount(newCount);
+                    UI.updateKudosCounter(newCount);
+                }
+            } catch (error) {
+                console.error("[Strava Auto Kudos] Erreur lors du traitement des entrées:", error);
+                await StateManager.pause(5000); // Pause de 5 secondes en cas d'erreur
+            }
+
+            console.log("[Strava Auto Kudos] Traitement des entrées terminé");
+        }
+    };
+    console.log("[Strava Auto Kudos] Module KudosManager initialisé");
 }
 
-// Exporter le module de gestion des kudos
-if (typeof module !== 'undefined') {
-    module.exports = KudosManager;
+// Exporter le module
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = window.KudosManager;
 }
-
-// Ajoutez ces lignes à la fin du fichier
-if (typeof KudosManager !== 'undefined') {
-    console.log("[Strava Auto Kudos] KudosManager module loaded successfully");
-} else {
-    console.error("[Strava Auto Kudos] KudosManager module not properly defined!");
-}
-
-// Supprimer la condition de scroll pour donner les kudos immédiatement
-setInterval(() => {
-    if (CONFIG.state.isEnabled) {
-        Logger.debug('Periodic kudos check triggered');
-        KudosManager.loopKudos();
-    }
-}, 200);
-
-// Near the end of kudosManager.js, add an initial delay:
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        KudosManager.loopKudos();
-    }, 1000);
-});

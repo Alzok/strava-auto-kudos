@@ -1,20 +1,25 @@
 {
   "name": "strava-auto-kudos",
-  "version": "1.6.0",
-  "description": "Chrome extension that automatically gives kudos to Strava activities.",
+  "version": "1.0.0",
+  "description": "Extension Chrome pour donner automatiquement des kudos sur Strava",
   "main": "gulpfile.js",
   "scripts": {
     "build": "gulp build",
+    "clean": "gulp clean",
     "package": "gulp package",
-    "default": "gulp"
+    "validate": "gulp validate"
   },
   "devDependencies": {
-    "gulp": "^4.0.2",
     "del": "^6.0.0",
+    "gulp": "^4.0.2",
     "gulp-clean-css": "^4.3.0",
     "gulp-concat": "^2.6.1",
+    "gulp-imagemin": "^7.1.0",
+    "gulp-sourcemaps": "^3.0.0",
     "gulp-uglify": "^3.0.2",
-    "gulp-zip": "^5.0.2",
+    "gulp-zip": "^5.1.0",
     "merge-stream": "^2.0.0"
-  }
+  },
+  "author": "Votre nom",
+  "license": "MIT"
 }

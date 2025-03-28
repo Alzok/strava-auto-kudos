@@ -1,3 +1,38 @@
+:root {
+    /* Couleurs */
+    --color-error: #ff4444;
+    --color-success: #00C851;
+    --color-info: #33b5e5;
+    --color-text: #666;
+    --color-background: rgba(255, 255, 255, 0.95);
+    --color-strava: #fc5200;
+    --color-strava-hover: #e64a00;
+    --color-pause: #999;
+    
+    /* Espacements */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 12px;
+    --spacing-lg: 16px;
+    --spacing-xl: 20px;
+    
+    /* Bordures */
+    --border-radius: 4px;
+    --border-width: 4px;
+    
+    /* Animations */
+    --transition-duration: 0.3s;
+    
+    /* Ombres */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.15);
+    
+    /* Z-index */
+    --z-index-base: 2147483646;
+    --z-index-overlay: 2147483647;
+}
+
 .social_assistant_bulle {
     overflow: hidden;
     box-sizing: border-box;
@@ -54,8 +89,8 @@
 
 /* Style pour la bulle en pause */
 .social_assistant_bulle.paused {
-    background-color: #999;
-    opacity: 0.6;
+    background-color: #999 !important; /* Ajout de !important pour forcer la priorité */
+    opacity: 0.6 !important; /* Ajout de !important pour forcer la priorité */
 }
 
 /* Compteur de Kudos */
@@ -74,6 +109,21 @@
     left: 17px;
     top: 7px;
     padding: 1px 7px;
+}
+
+#strava-auto-kudos-container.paused .kudos-counter {
+    background-color: #444;
+    opacity: 0.6;
+    color: #fff;
+}
+
+#strava-auto-kudos-container.paused .social_assistant_bulle {
+    background-color: #444;
+    border-color: #444;
+}
+
+#strava-auto-kudos-container.paused .social_assistant_bulle .icon-container svg {
+    fill: #fff;
 }
 
 /* Zone de notification */
@@ -250,9 +300,8 @@
 /* Style pour l'alerte d'erreur */
 .strava-auto-kudos-alert {
     position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: 20px;
+    right: 80px; /* Position à gauche du bouton social_assistant_bulle */
     z-index: 2147483647;
     background-color: #ffab00;
     color: #333;
@@ -261,15 +310,28 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     font-weight: bold;
     font-size: 14px;
-    text-align: center;
-    max-width: 90%;
+    text-align: left;
+    max-width: 300px;
     line-height: 1.5;
     display: flex;
     align-items: center;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
 .strava-auto-kudos-alert-icon {
     margin-right: 10px;
+    flex-shrink: 0;
 }
 
 .strava-auto-kudos-alert-close {
@@ -288,4 +350,206 @@
 #cancel-pause {
     margin-left: 5px;
     cursor: pointer;
+}
+
+/* Conteneur de notifications */
+.notification-container {
+    position: fixed;
+    top: var(--spacing-xl);
+    right: var(--spacing-xl);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+/* Notification individuelle */
+.notification {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--border-radius);
+    background-color: var(--color-background);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    max-width: 400px;
+    transition: all var(--transition-duration) ease-out;
+}
+
+.notification-icon {
+    margin-right: var(--spacing-md);
+    font-size: 20px;
+}
+
+.notification-message {
+    flex: 1;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 var(--spacing-xs);
+    color: var(--color-text);
+}
+
+/* Types de notifications */
+.notification.error {
+    background-color: rgba(255, 235, 235, 0.95);
+    border-left: var(--border-width) solid var(--color-error);
+}
+
+.notification.success {
+    background-color: rgba(235, 255, 235, 0.95);
+    border-left: var(--border-width) solid var(--color-success);
+}
+
+.notification.info {
+    background-color: rgba(235, 245, 255, 0.95);
+    border-left: var(--border-width) solid var(--color-info);
+}
+
+/* Animation de sortie */
+.notification.fade-out {
+    opacity: 0;
+    transform: translateX(20px);
+}
+
+/* Conteneur principal */
+.social_assistant_container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+}
+
+/* Bulle principale */
+.social_assistant_bulle {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Bouton principal */
+.social_assistant_button {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #FC4C02;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: white;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s ease;
+}
+
+.social_assistant_button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Compteur de kudos */
+.kudos-counter {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #fff;
+    border: 2px solid #FC4C02;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: #FC4C02;
+}
+
+/* Menu déroulant */
+.dropdown {
+    position: absolute;
+    bottom: 60px;
+    right: 0;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    min-width: 200px;
+    display: none;
+}
+
+.dropdown.visible {
+    display: block;
+}
+
+/* Statistiques */
+.stats {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    color: #666;
+}
+
+.stat-label {
+    font-weight: 500;
+}
+
+.stat-value {
+    font-weight: bold;
+    color: #FC4C02;
+}
+
+/* Timer de pause */
+.pause-timer {
+    position: absolute;
+    bottom: 60px;
+    right: 0;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #666;
+}
+
+.timer-icon {
+    font-size: 16px;
+}
+
+.timer-value {
+    font-weight: bold;
+    color: #FC4C02;
+}
+
+/* État de pause */
+.social_assistant_button.paused {
+    background: #666;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown, .pause-timer {
+    animation: fadeIn 0.3s ease-out;
 }

@@ -1,64 +1,112 @@
 # Strava Auto Kudos
 
-A Chrome extension that automatically gives kudos to activities in your Strava feed.
+Une extension Chrome qui automatise l'envoi de kudos sur Strava de manière intelligente et respectueuse des limites de l'API.
 
-## Features
+## Fonctionnalités
 
-- Automatically gives kudos to activities in your Strava feed
-- Customizable settings for which activities receive kudos
-- Visual indicators showing which activities have received automatic kudos
-- Works seamlessly in the background when browsing Strava
+- 🚀 Envoi automatique de kudos sur les activités du flux
+- ⚡ Traitement asynchrone et optimisé des performances
+- 🛡️ Gestion robuste des erreurs avec système de pause progressif
+- 📊 Statistiques en temps réel des kudos envoyés
+- 🔄 Reprise automatique après les pauses
+- 🎯 Interface utilisateur intuitive
 
 ## Installation
 
-1. Visit the Chrome Web Store at [Strava Auto Kudos](https://chromewebstore.google.com/detail/strava-auto-kudos/gpifcdlpbfehjkkojfhmlfgplalikdjf)
-2. Click "Add to Chrome" to install the extension
-3. Once installed, navigate to [Strava](https://www.strava.com) to use the extension
+1. Clonez ce dépôt :
+```bash
+git clone https://github.com/votre-username/strava-auto-kudos.git
+```
 
-## Usage
+2. Ouvrez Chrome et accédez à `chrome://extensions/`
+3. Activez le "Mode développeur"
+4. Cliquez sur "Charger l'extension non empaquetée"
+5. Sélectionnez le dossier `extension` du projet
 
-After installation, the extension works automatically when you browse Strava:
+## Architecture
 
-1. Navigate to your Strava feed
-2. The extension will automatically give kudos to activities based on your settings
-3. Access the extension settings by clicking the Strava Auto Kudos icon in your browser toolbar
+L'extension est structurée en plusieurs modules :
 
-## Code Structure
+### Core Modules
 
-The extension is organized as follows:
+- **App** : Module principal d'initialisation
+- **StateManager** : Gestion centralisée de l'état
+- **KudosManager** : Gestion des kudos et des interactions avec Strava
+- **ErrorManager** : Gestion des erreurs et des pauses
+- **DOMManager** : Abstraction des interactions DOM
+- **NotificationManager** : Gestion des notifications
+- **UI** : Interface utilisateur
+- **Logger** : Système de logging
+- **Storage** : Gestion du stockage local
+- **Utils** : Fonctions utilitaires
 
-- `manifest.json`: Extension configuration and metadata
-- `assets/js/`: JavaScript files that power the extension
-  - `config.js`: Configuration options for the extension
-  - `logger.js`: Logging functionality
-  - `storage.js`: Handles saving and loading user preferences
-  - `utils.js`: Helper functions used throughout the extension
-  - `ui.js`: User interface components and interaction
-  - `kudosManager.js`: Core functionality for giving kudos
-  - `app.js`: Main application logic
-  - `main.js`: Entry point for the extension
-- `assets/css/style.css`: Styling for the extension's UI elements
-- `icon16.png`, `icon48.png`, `icon128.png`: Extension icons in various sizes
-- `strava.png`: Default action icon
+### Configuration
 
-## For Developers
+- **CONFIG** : Configuration centralisée (sélecteurs, délais, messages)
 
-### Extension Architecture
+## Système de Pause
 
-The extension follows a modular architecture:
+L'extension utilise un système de pause progressif pour gérer les erreurs :
 
-- Configuration is separated from business logic
-- Storage module abstracts Chrome storage API
-- UI components are isolated in the UI module
-- KudosManager handles the core functionality of giving kudos
+1. **LIGHT** (30s) : 1-2 erreurs
+2. **MEDIUM** (1min) : 3-4 erreurs
+3. **HEAVY** (5min) : 5-6 erreurs
+4. **CRITICAL** (24h) : 7+ erreurs
 
-### Building from Source
+## Performance
 
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Use gulp to build: `gulp build`
-4. Load the unpacked extension from the `prod` directory in Chrome's developer mode
+- Traitement par lots de 5 entrées
+- Délais aléatoires entre les kudos (100-300ms)
+- Maximum 3 kudos simultanés
+- Système de retry (3 tentatives)
+- Nettoyage automatique des entrées traitées
 
-## Version
+## Développement
 
-Current version: 1.6.0
+### Prérequis
+
+- Chrome Browser
+- Node.js (optionnel, pour les tests)
+
+### Structure du Projet
+
+```
+extension/
+├── assets/
+│   ├── css/
+│   ├── js/
+│   └── images/
+├── manifest.json
+└── README.md
+```
+
+### Tests
+
+```bash
+# À implémenter
+npm test
+```
+
+## Contribution
+
+1. Fork le projet
+2. Créez une branche (`git checkout -b feature/AmazingFeature`)
+3. Committez vos changements (`git commit -m 'Add some AmazingFeature'`)
+4. Push vers la branche (`git push origin feature/AmazingFeature`)
+5. Ouvrez une Pull Request
+
+## Licence
+
+Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
+
+## Support
+
+Pour toute question ou problème, veuillez ouvrir une issue sur GitHub.
+
+## Changelog
+
+### [1.0.0] - 2024-03-18
+- Version initiale
+- Système de pause progressif
+- Gestion optimisée des performances
+- Interface utilisateur améliorée

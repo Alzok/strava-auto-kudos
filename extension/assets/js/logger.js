@@ -1,57 +1,90 @@
 /**
- * Module pour la gestion des logs
+ * Module de logging centralisé
+ * @module Logger
  */
-console.log("[Strava Auto Kudos] Logger module loading");
 
-const Logger = {
-    prefix: '[Strava Auto Kudos]',
-    
-    info: (message) => {
-        console.info(`${Logger.prefix} ${message}`);
-    },
-    
-    error: (message, error = null) => {
-        // Si error est null ou undefined, ne pas l'inclure dans le log
-        if (error) {
-            console.error(`${Logger.prefix} ${message}`, error);
-        } else {
-            console.error(`${Logger.prefix} ${message}`);
+// Vérifier si Logger est déjà défini
+if (typeof window.Logger === 'undefined') {
+    // Configuration par défaut
+    const defaultConfig = {
+        logging: {
+            level: 'info',
+            prefix: '[Strava Auto Kudos]'
         }
-    },
-    
-    debug: (message, data = null) => {
-        // Si data est null ou undefined, ne pas l'inclure dans le log
-        if (data) {
-            console.debug(`${Logger.prefix} ${message}`, data);
-        } else {
-            console.debug(`${Logger.prefix} ${message}`);
-        }
-    },
-    
-    // Ajout de la méthode warn manquante avec la même logique que error
-    warn: (message, data = null) => {
-        // Si data est null ou undefined, ne pas l'inclure dans le log
-        if (data) {
-            console.warn(`${Logger.prefix} ${message}`, data);
-        } else {
-            console.warn(`${Logger.prefix} ${message}`);
-        }
-    }
-};
-
-// Ajoutez cette fonction au module Logger
-if (typeof Logger !== 'undefined') {
-    Logger.init = function() {
-        console.log("[Strava Auto Kudos] Logger initialized successfully");
     };
-    
-    // Appelez immédiatement la fonction d'initialisation
-    Logger.init();
-} else {
-    console.error("[Strava Auto Kudos] Logger module undefined!");
+
+    // Utiliser la configuration globale ou la configuration par défaut
+    const config = window.CONFIG || defaultConfig;
+
+    window.Logger = {
+        /**
+         * Niveau de log actuel (debug, info, error)
+         * @type {string}
+         */
+        logLevel: config.logging?.level || 'info',
+
+        /**
+         * Préfixe pour tous les logs
+         * @type {string}
+         */
+        prefix: config.logging?.prefix || '[Strava Auto Kudos]',
+
+        /**
+         * Log un message de debug
+         * @param {string} message - Le message à logger
+         * @param {*} [data] - Données optionnelles à logger
+         */
+        debug(message, data) {
+            if (this.logLevel === 'debug') {
+                console.debug(`${this.prefix} ${message}`, data || '');
+            }
+        },
+
+        /**
+         * Log un message d'information
+         * @param {string} message - Le message à logger
+         * @param {*} [data] - Données optionnelles à logger
+         */
+        info(message, data) {
+            if (['debug', 'info'].includes(this.logLevel)) {
+                console.info(`${this.prefix} ${message}`, data || '');
+            }
+        },
+
+        /**
+         * Log une erreur
+         * @param {string} message - Le message d'erreur
+         * @param {Error} [error] - L'objet d'erreur
+         */
+        error(message, error) {
+            console.error(`${this.prefix} ${message}`, error || '');
+        },
+
+        /**
+         * Log un avertissement
+         * @param {string} message - Le message d'avertissement
+         * @param {*} [data] - Données optionnelles à logger
+         */
+        warn(message, data) {
+            if (['debug', 'info', 'warn'].includes(this.logLevel)) {
+                console.warn(`${this.prefix} ${message}`, data || '');
+            }
+        },
+
+        /**
+         * Définit le niveau de log
+         * @param {string} level - Le niveau de log (debug, info, warn, error)
+         */
+        setLevel(level) {
+            if (['debug', 'info', 'warn', 'error'].includes(level)) {
+                this.logLevel = level;
+                this.info(`Log level set to: ${level}`);
+            }
+        }
+    };
 }
 
-// Exporter le module de logging
-if (typeof module !== 'undefined') {
-    module.exports = Logger;
+// Exporter le module
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = window.Logger;
 }
