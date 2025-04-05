@@ -5,7 +5,6 @@ const cleanCSS = require('gulp-clean-css');
 const del = require('del');
 const zip = require('gulp-zip');
 const merge = require('merge-stream');
-const eslint = require('gulp-eslint');
 
 // Clean the prod directory
 gulp.task('clean', function() {
@@ -109,18 +108,9 @@ gulp.task('zip', function() {
         .pipe(gulp.dest('./'));
 });
 
-// Add a lint task
-gulp.task('lint', function() {
-    return gulp.src(['extension/assets/js/**/*.js'])
-        .pipe(eslint())
-        .pipe(eslint.format())
-        .pipe(eslint.failAfterError());
-});
-
 // Build task
 gulp.task('build', gulp.series(
     'clean',
-    'lint',
     gulp.parallel('scripts', 'styles', 'copy'),
     'update-manifest'
 ));

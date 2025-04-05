@@ -10,8 +10,14 @@ const UI = {
     createBulle: () => {
         console.log("[Strava Auto Kudos] Creating UI bubble");
         try {
-            // Nettoyage préalable
-            document.querySelectorAll('#strava-auto-kudos-container').forEach(c => c.remove());
+            // Supprimer tous les conteneurs existants pour éviter les duplications
+            const existingContainers = document.querySelectorAll('#strava-auto-kudos-container');
+            existingContainers.forEach(container => {
+                console.log("[Strava Auto Kudos] Removing existing container to avoid duplication");
+                container.remove();
+            });
+            
+            // Réinitialiser le compteur de kudos pour la session actuelle
             CONFIG.state.kudosCount = 0;
             console.log("[Strava Auto Kudos] Reset kudos count to 0 for current session");
             
@@ -41,8 +47,12 @@ const UI = {
             bulle.className = CONFIG.classes.bulle;
             bulle.id = "strava-auto-kudos-bubble";
             
-            // Éviter de dupliquer la création d'icône : réutiliser un helper
-            UI._appendBubbleIcon(bulle);
+            // Ajouter l'icône à la bulle en fonction de l'état
+            const iconDiv = document.createElement('div');
+            iconDiv.className = "icon-container";
+            // CORRECTION: Afficher le pouce quand actif, icône de pause quand en pause
+            iconDiv.innerHTML = CONFIG.state.isEnabled ? CONFIG.icons.thumbsUp : CONFIG.icons.pause;
+            bulle.appendChild(iconDiv);
             
             // Ajouter la classe d'animation si activé et pas en pause temporaire
             if (CONFIG.state.isEnabled && !CONFIG.state.pauseUntil) {
@@ -107,12 +117,6 @@ const UI = {
         }
     },
     
-    _resetPauseIfExpired() {
-        if (CONFIG.state.pauseUntil && CONFIG.state.pauseUntil < Date.now()) {
-            this.cancelAutoPause();
-        }
-    },
-
     /**
      * Vérifie si la bulle existe et la crée si nécessaire
      * @returns {HTMLElement} - L'élément bulle
@@ -203,11 +207,59 @@ const UI = {
     incrementKudosCount: () => {
         try {
             // Incrémenter le compteur pour cette session uniquement
-            CONFIG.state.kudosCount++;
+            CONFIG.state.kudosCount += 1;
+            
             console.log(`[Strava Auto Kudos] Incrementing kudos counter to:`, CONFIG.state.kudosCount);
             
-            // Mettre à jour l'affichage
-            UI._updateKudosCounterDisplay();
+            // CORRECTION: Problème identifié - le sélecteur CSS ne correspond pas exactement
+            // Vérifier le sélecteur exact et afficher le compteur trouvé
+            const allCounters = document.querySelectorAll('#strava-auto-kudos-container > div');
+            console.log('[Strava Auto Kudos] All child divs in container:', allCounters.length);
+            
+            const counter = document.querySelector(`#strava-auto-kudos-container .${CONFIG.classes.counter}`);
+            console.log('[Strava Auto Kudos] Counter element found?', counter ? 'Yes' : 'No', counter);
+            
+            if (counter) {
+                // Forcer l'affichage de la nouvelle valeur
+                const displayValue = CONFIG.state.kudosCount > 999 ? '999+' : CONFIG.state.kudosCount;
+                counter.textContent = displayValue;
+                
+                // Faire clignoter le compteur pour montrer qu'il a été mis à jour
+                counter.style.transition = 'transform 0.2s';
+                counter.style.transform = 'scale(1.3)';
+                
+                // CORRECTION: Assurer que le compteur est visible
+                counter.style.display = 'block';
+                counter.style.visibility = 'visible';
+                counter.style.opacity = '1';
+                
+                setTimeout(() => {
+                    counter.style.transform = 'scale(1)';
+                }, 200);
+                
+                console.log('[Strava Auto Kudos] Counter UI updated to:', displayValue);
+            } else {
+                console.error('[Strava Auto Kudos] Counter element not found, recreating counter');
+                
+                // CORRECTION: Créer un nouveau compteur si non trouvé au lieu de recréer toute la bulle
+                const container = document.getElementById('strava-auto-kudos-container');
+                if (container) {
+                    const newCounter = document.createElement('div');
+                    newCounter.className = CONFIG.classes.counter;
+                    newCounter.textContent = CONFIG.state.kudosCount;
+                    newCounter.style.display = 'block';
+                    
+                    // Ajouter en position correcte (avant la bulle qui est le dernier élément)
+                    const bulle = document.querySelector('#strava-auto-kudos-bubble');
+                    if (bulle && bulle.parentNode === container) {
+                        container.insertBefore(newCounter, bulle);
+                    } else {
+                        container.appendChild(newCounter);
+                    }
+                    
+                    console.log('[Strava Auto Kudos] New counter created:', newCounter);
+                }
+            }
         } catch (error) {
             console.error('[Strava Auto Kudos] Error incrementing kudos count:', error);
         }
@@ -579,66 +631,6 @@ const UI = {
         
         // Mettre à jour l'interface
         UI.updateBulleStatus(CONFIG.state.isEnabled);
-    },
-
-    // Consolidated function for handling pause due to errors
-    handlePauseDueToErrors: function() {
-        UI.showLimitExceededAlert();
-        UI.showCountdownTimer(Date.now() + 5 * 60 * 1000);
-    },
-
-    // Nouvelle fonction pour générer l'icône dans la bulle
-    _appendBubbleIcon: (bulle) => {
-        const iconDiv = document.createElement('div');
-        iconDiv.className = "icon-container";
-        iconDiv.innerHTML = CONFIG.state.isEnabled ? CONFIG.icons.thumbsUp : CONFIG.icons.pause;
-        bulle.appendChild(iconDiv);
-    },
-    
-    // Extraire la mise à jour de l'affichage dans une fonction dédiée
-    _updateKudosCounterDisplay: () => {
-        const counter = document.querySelector(`#strava-auto-kudos-container .${CONFIG.classes.counter}`);
-        if (!counter) {
-            console.error('[Strava Auto Kudos] Counter element not found, recreating counter');
-            
-            // Créer un nouveau compteur si non trouvé
-            const container = document.getElementById('strava-auto-kudos-container');
-            if (container) {
-                const newCounter = document.createElement('div');
-                newCounter.className = CONFIG.classes.counter;
-                newCounter.textContent = CONFIG.state.kudosCount;
-                newCounter.style.display = 'block';
-                
-                // Ajouter en position correcte (avant la bulle qui est le dernier élément)
-                const bulle = document.querySelector('#strava-auto-kudos-bubble');
-                if (bulle && bulle.parentNode === container) {
-                    container.insertBefore(newCounter, bulle);
-                } else {
-                    container.appendChild(newCounter);
-                }
-                
-                console.log('[Strava Auto Kudos] New counter created:', newCounter);
-            }
-            return;
-        }
-        
-        const displayValue = CONFIG.state.kudosCount > 999 ? '999+' : CONFIG.state.kudosCount;
-        counter.textContent = displayValue;
-        
-        // Faire clignoter le compteur pour montrer qu'il a été mis à jour
-        counter.style.transition = 'transform 0.2s';
-        counter.style.transform = 'scale(1.3)';
-        
-        // Assurer que le compteur est visible
-        counter.style.display = 'block';
-        counter.style.visibility = 'visible';
-        counter.style.opacity = '1';
-        
-        setTimeout(() => {
-            counter.style.transform = 'scale(1)';
-        }, 200);
-        
-        console.log('[Strava Auto Kudos] Counter UI updated to:', displayValue);
     }
 };
 

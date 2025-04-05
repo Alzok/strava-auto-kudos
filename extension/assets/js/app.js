@@ -4,8 +4,8 @@ console.log("[Strava Auto Kudos] App module loading");
  * Module d'initialisation de l'application
  */
 const App = {
-    init() {
-        Logger.debug("App init called");
+    init: () => {
+        Logger.info('Initialisation de l\'extension');
         console.log("[Strava Auto Kudos] App.init() called, URL:", window.location.href);
         
         try {
@@ -27,7 +27,7 @@ const App = {
             Logger.info(`État de l'extension chargé: ${CONFIG.state.isEnabled ? 'actif' : 'inactif'}`);
             
             // Appeler directement onDOMLoaded pour créer l'interface
-            this.onDOMLoaded();
+            App.onDOMLoaded();
             
             // Pour le dashboard, activer les fonctionnalités de kudos automatiques
             const isDashboard = Utils.isDashboardPage();
@@ -49,14 +49,18 @@ const App = {
         }
     },
 
-    onDOMLoaded() {
+    onDOMLoaded: () => {
         Logger.debug('DOM chargé, création des éléments UI');
         console.log("[Strava Auto Kudos] onDOMLoaded() called");
         
         try {
             // Réinitialiser explicitement le compteur de kudos pour cette session
-            this.resetSessionCounters();
+            CONFIG.state.kudosCount = 0;
             console.log("[Strava Auto Kudos] Reset kudos count to 0 for current session");
+            
+            // Réinitialiser les compteurs de session
+            CONFIG.state.kudosAttempts = 0;
+            CONFIG.state.kudosSuccesses = 0;
             
             // Initialiser le système d'auto-optimisation des délais
             App.initDelayOptimization();
@@ -101,13 +105,6 @@ const App = {
             Logger.error('Erreur lors du chargement du DOM', error);
             console.error('[Strava Auto Kudos] DOM loading error:', error);
         }
-    },
-
-    resetSessionCounters() {
-        Logger.debug("Resetting kudos counters for a fresh session");
-        CONFIG.state.kudosCount = 0;
-        CONFIG.state.kudosAttempts = 0;
-        CONFIG.state.kudosSuccesses = 0;
     },
 
     /** 
