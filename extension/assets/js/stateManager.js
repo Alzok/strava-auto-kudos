@@ -32,13 +32,74 @@ if (typeof window.StateManager === 'undefined') {
         },
 
         /**
+         * Timer pour le debounce de saveState
+         * @type {number|null}
+         * @private
+         */
+        _saveStateTimer: null,
+
+        /**
+         * Délai pour le debounce de saveState en ms
+         * @type {number}
+         * @private
+         */
+        _saveStateDelay: 500,
+
+        /**
+         * Indique si une sauvegarde est en attente
+         * @type {boolean}
+         * @private
+         */
+        _saveStatePending: false,
+
+        /**
          * Initialise le gestionnaire d'état
          */
         init() {
             console.log("[Strava Auto Kudos] Initialisation du StateManager");
+            
+            // Réinitialiser l'état aux valeurs par défaut
+            this.resetToDefaults();
+            
+            // Charger l'état sauvegardé
             this.loadState();
+            
+            // Réinitialiser le compteur de kudos à 0
+            this.state.kudosCount = 0;
+            
+            // Configurer l'écouteur de changements
             this.setupStorageListener();
+            
+            // Démarrer le nettoyage périodique
             this.startPeriodicCleanup();
+
+            console.log("[Strava Auto Kudos] StateManager initialisé:", this.state);
+        },
+
+        /**
+         * Réinitialise l'état aux valeurs par défaut
+         * @private
+         */
+        resetToDefaults() {
+            this.state = {
+                enabled: false,
+                kudosCount: 0,
+                processedEntries: new Set(),
+                pauseUntil: null,
+                errors: [],
+                maxErrors: window.CONFIG.limits.maxErrors || 5,
+                lastSync: null,
+                delays: {
+                    min: 100,
+                    max: 200
+                },
+                kudosAttempts: 0,
+                kudosSuccesses: 0,
+                kudosErrors: 0,
+                errorCount: 0,
+                isProcessing: false,
+                maxProcessedEntries: 1000
+            };
         },
 
         /**
@@ -53,11 +114,22 @@ if (typeof window.StateManager === 'undefined') {
             try {
                 const savedState = Storage.get('state');
                 if (savedState) {
+                    // Préserver le compteur de kudos actuel
+                    const currentKudosCount = this.state.kudosCount;
+                    
+                    // Charger l'état complet
+                    if (savedState.processedEntries) {
+                        // Convertir le tableau en Set pour processedEntries
+                        savedState.processedEntries = new Set(savedState.processedEntries);
+                    }
+                    
+                    // Fusionner avec l'état actuel
                     this.state = {
-                        ...this.state,
-                        ...savedState,
-                        processedEntries: new Set(savedState.processedEntries || [])
+                        ...this.resetToDefaults(), // Valeurs par défaut
+                        ...savedState,             // Valeurs sauvegardées
+                        kudosCount: currentKudosCount // Préserver le compteur actuel
                     };
+                    
                     console.log("[Strava Auto Kudos] État chargé:", this.state);
                 } else {
                     console.log("[Strava Auto Kudos] Aucun état sauvegardé trouvé");
@@ -103,13 +175,121 @@ if (typeof window.StateManager === 'undefined') {
         },
 
         /**
-         * Sauvegarde l'état dans le stockage local
+         * Sauvegarde l'état dans le stockage local avec debounce
          */
         saveState() {
-            Storage.set('state', {
-                ...this.state,
-                processedEntries: Array.from(this.state.processedEntries)
-            });
+            // Marquer qu'une sauvegarde est en attente
+            this._saveStatePending = true;
+            
+            // Annuler le timer existant s'il y en a un
+            if (this._saveStateTimer) {
+                clearTimeout(this._saveStateTimer);
+            }
+            
+            // Créer un nouveau timer
+            this._saveStateTimer = setTimeout(() => {
+                this._actualSaveState();
+                this._saveStatePending = false;
+                this._saveStateTimer = null;
+            }, this._saveStateDelay);
+        },
+        
+        /**
+         * Sauvegarde immédiate de l'état (sans debounce)
+         */
+        saveStateImmediate() {
+            // Annuler le timer existant s'il y en a un
+            if (this._saveStateTimer) {
+                clearTimeout(this._saveStateTimer);
+                this._saveStateTimer = null;
+            }
+            
+            this._actualSaveState();
+            this._saveStatePending = false;
+        },
+        
+        /**
+         * Implémentation réelle de la sauvegarde
+         * @private
+         */
+        _actualSaveState() {
+            if (!Storage.isAvailable()) {
+                console.error("[Strava Auto Kudos] Le stockage local n'est pas disponible");
+                this._tryAlternativeStorage();
+                return;
+            }
+            
+            try {
+                // Créer une copie de l'état avec processedEntries converti en array
+                const stateToSave = {
+                    ...this.state,
+                    processedEntries: Array.from(this.state.processedEntries),
+                    lastSync: Date.now()
+                };
+                
+                Storage.set('state', stateToSave);
+                console.log("[Strava Auto Kudos] État sauvegardé");
+                
+                // Backup dans sessionStorage pour récupération en cas de problème
+                try {
+                    sessionStorage.setItem('state_backup', JSON.stringify(stateToSave));
+                } catch (e) {
+                    console.warn("[Strava Auto Kudos] Impossible de sauvegarder dans sessionStorage:", e);
+                }
+            } catch (error) {
+                console.error("[Strava Auto Kudos] Erreur lors de la sauvegarde de l'état:", error);
+                
+                // Tentative de récupération
+                try {
+                    // Vérifier si l'erreur est due à la taille du stockage
+                    const compressedState = JSON.stringify({
+                        ...this.state,
+                        // Ne garder que les entrées récentes (dernières 24h)
+                        processedEntries: Array.from(this.state.processedEntries).slice(-100),
+                        lastSync: Date.now()
+                    });
+                    
+                    if (compressedState.length > 5242880) { // ~5MB limite de localStorage
+                        console.warn("[Strava Auto Kudos] État trop volumineux, réduction de la taille");
+                        // Réduire davantage si nécessaire
+                        this.resetProcessedEntries();
+                        this.saveState();
+                    } else {
+                        // Essayer de sauvegarder l'état compressé
+                        Storage.set('state', JSON.parse(compressedState));
+                        console.log("[Strava Auto Kudos] État sauvegardé (version compressée)");
+                    }
+                } catch (compressError) {
+                    console.error("[Strava Auto Kudos] Erreur lors de la compression de l'état:", compressError);
+                    this._tryAlternativeStorage();
+                }
+            }
+        },
+        
+        /**
+         * Tente d'utiliser des méthodes de stockage alternatives en cas d'échec
+         * @private
+         */
+        _tryAlternativeStorage() {
+            console.log("[Strava Auto Kudos] Tentative de stockage alternatif");
+            
+            try {
+                // 1. Essayer sessionStorage (temporaire mais plus grand que localStorage)
+                const minimalState = {
+                    enabled: this.state.enabled,
+                    kudosCount: this.state.kudosCount,
+                    lastSync: Date.now()
+                };
+                
+                sessionStorage.setItem('strava_auto_kudos_state', JSON.stringify(minimalState));
+                console.log("[Strava Auto Kudos] État minimal sauvegardé dans sessionStorage");
+                
+                // 2. Rappeler que les données peuvent être perdues
+                console.warn("[Strava Auto Kudos] Les données complètes n'ont pas pu être sauvegardées et pourraient être perdues à la fermeture du navigateur");
+                
+            } catch (error) {
+                console.error("[Strava Auto Kudos] Échec de toutes les tentatives de sauvegarde:", error);
+            }
         },
 
         /**
@@ -118,7 +298,7 @@ if (typeof window.StateManager === 'undefined') {
          */
         setEnabled(enabled) {
             this.state.enabled = enabled;
-            this.saveState();
+            this.saveStateImmediate(); // Sauvegarde immédiate pour ce changement important
             console.log(`[Strava Auto Kudos] Extension ${enabled ? 'activée' : 'désactivée'}`);
         },
 
@@ -134,8 +314,18 @@ if (typeof window.StateManager === 'undefined') {
          * Incrémente le compteur de kudos
          */
         incrementKudosCount() {
+            if (!this.state.enabled || this.isPaused()) {
+                console.log("[Strava Auto Kudos] Extension désactivée ou en pause, pas d'incrémentation du compteur");
+                return;
+            }
             this.state.kudosCount++;
-            this.saveState();
+            this.saveState(); // Utilise le debounce
+            console.log("[Strava Auto Kudos] Compteur de kudos incrémenté:", this.state.kudosCount);
+            
+            // Émettre un événement pour informer l'interface de la mise à jour
+            if (window.App && typeof window.App.emit === 'function') {
+                window.App.emit('kudosAdded', this.state.kudosCount);
+            }
         },
 
         /**
@@ -150,9 +340,9 @@ if (typeof window.StateManager === 'undefined') {
          * Marque une entrée comme traitée
          * @param {string} entryId - Identifiant de l'entrée
          */
-        markProcessed(entryId) {
+        markAsProcessed(entryId) {
             this.state.processedEntries.add(entryId);
-            this.saveState();
+            this.saveState(); // Utilise le debounce
         },
 
         /**
@@ -166,12 +356,22 @@ if (typeof window.StateManager === 'undefined') {
 
         /**
          * Met l'extension en pause
-         * @param {number} duration - Durée de la pause en ms
+         * @param {number} duration - Durée de la pause en millisecondes
          */
-        pause(duration) {
+        async pause(duration) {
+            console.log("[Strava Auto Kudos] Extension mise en pause pour", duration, "ms");
             this.state.pauseUntil = Date.now() + duration;
-            this.saveState();
-            console.log(`[Strava Auto Kudos] Extension en pause pour ${duration}ms`);
+            this.state.isProcessing = false;
+            this.saveStateImmediate(); // Sauvegarde immédiate pour ce changement important
+        },
+
+        /**
+         * Reprend après une pause
+         */
+        resume() {
+            console.log("[Strava Auto Kudos] Reprise après pause");
+            this.state.pauseUntil = null;
+            this.saveStateImmediate(); // Sauvegarde immédiate pour ce changement important
         },
 
         /**
@@ -180,21 +380,27 @@ if (typeof window.StateManager === 'undefined') {
          */
         isPaused() {
             if (!this.state.pauseUntil) return false;
-            const stillPaused = Date.now() < this.state.pauseUntil;
-            if (!stillPaused) {
+            const isPaused = Date.now() < this.state.pauseUntil;
+            if (!isPaused) {
+                // Si la pause est terminée, réinitialiser l'état
                 this.state.pauseUntil = null;
-                this.saveState();
+                this.saveState(); // Utilise le debounce
             }
-            return stillPaused;
+            return isPaused;
         },
 
         /**
-         * Ajoute une erreur à l'historique
-         * @param {Error} error - L'erreur à ajouter
+         * Gère une erreur
+         * @param {Error} error - L'erreur à gérer
+         * @param {string} context - Le contexte de l'erreur
          */
-        addError(error) {
+        handleError(error, context) {
+            console.error(`[Strava Auto Kudos] Erreur dans ${context}:`, error);
+            this.state.errorCount++;
+            this.state.kudosErrors++;
             this.state.errors.push({
                 message: error.message,
+                context: context,
                 timestamp: Date.now()
             });
             
@@ -202,10 +408,10 @@ if (typeof window.StateManager === 'undefined') {
             const oneHourAgo = Date.now() - 3600000;
             this.state.errors = this.state.errors.filter(e => e.timestamp > oneHourAgo);
             
-            this.saveState();
+            this.saveState(); // Utilise le debounce
 
             // Vérifier si on doit mettre en pause
-            if (this.state.errors.length >= this.state.maxErrors) {
+            if (this.state.errorCount >= this.state.maxErrors) {
                 this.pause(window.CONFIG.delays.pause || 30000);
             }
         },
@@ -222,37 +428,9 @@ if (typeof window.StateManager === 'undefined') {
          * Réinitialise l'état
          */
         reset() {
-            this.state = {
-                enabled: false,
-                kudosCount: 0,
-                processedEntries: new Set(),
-                pauseUntil: null,
-                errors: [],
-                maxErrors: window.CONFIG.limits.maxErrors || 5,
-                lastSync: null,
-                delays: {
-                    min: 100,
-                    max: 200
-                },
-                kudosAttempts: 0,
-                kudosSuccesses: 0,
-                kudosErrors: 0,
-                errorCount: 0,
-                isProcessing: false,
-                maxProcessedEntries: 1000
-            };
-            this.saveState();
+            this.resetToDefaults();
+            this.saveStateImmediate(); // Sauvegarde immédiate pour ce changement important
             console.log("[Strava Auto Kudos] État réinitialisé");
-        },
-
-        /**
-         * Gère une erreur
-         * @param {Error} error - L'erreur à gérer
-         * @param {string} context - Le contexte de l'erreur
-         */
-        handleError(error, context) {
-            Logger.error(`Erreur dans ${context}:`, error);
-            this.incrementErrorCount();
         },
 
         /**
@@ -275,7 +453,7 @@ if (typeof window.StateManager === 'undefined') {
                 min: Math.max(100, Math.floor(min * (1 + adjustment))),
                 max: Math.max(200, Math.floor(max * (1 + adjustment)))
             };
-            this.saveState();
+            this.saveState(); // Utilise le debounce
         },
 
         /**
@@ -316,7 +494,7 @@ if (typeof window.StateManager === 'undefined') {
          */
         setProcessing(value) {
             this.state.isProcessing = value;
-            this.saveState();
+            this.saveState(); // Utilise le debounce
         },
 
         /**
@@ -332,7 +510,7 @@ if (typeof window.StateManager === 'undefined') {
          */
         incrementErrorCount() {
             this.state.errorCount = (this.state.errorCount || 0) + 1;
-            this.saveState();
+            this.saveState(); // Utilise le debounce
         },
 
         /**
@@ -348,7 +526,56 @@ if (typeof window.StateManager === 'undefined') {
          */
         resetErrorCount() {
             this.state.errorCount = 0;
-            this.saveState();
+            this.saveState(); // Utilise le debounce
+        },
+
+        /**
+         * Réinitialise les entrées traitées
+         */
+        resetProcessedEntries() {
+            console.log("[Strava Auto Kudos] Réinitialisation des entrées traitées");
+            this.state.processedEntries.clear();
+            this.saveStateImmediate(); // Sauvegarde immédiate pour ce changement important
+        },
+
+        /**
+         * Active l'extension
+         */
+        async enable() {
+            console.log("[Strava Auto Kudos] Extension activée");
+            this.state.enabled = true;
+            this.state.pauseUntil = null; // Réinitialiser l'état de pause
+            this.resetProcessedEntries(); // Réinitialiser les entrées traitées
+            this.state.errorCount = 0; // Réinitialiser le compteur d'erreurs
+            this.state.kudosAttempts = 0; // Réinitialiser les tentatives
+            this.state.kudosSuccesses = 0; // Réinitialiser les succès
+            this.state.kudosErrors = 0; // Réinitialiser les erreurs
+            
+            // Sauvegarder immédiatement ces changements importants
+            this.saveStateImmediate();
+            
+            // Reprendre le traitement via KudosManager
+            if (window.KudosManager) {
+                console.log("[Strava Auto Kudos] Reprise du traitement via KudosManager");
+                window.KudosManager.resume();
+            }
+            
+            // Réinitialiser les observateurs
+            if (window.App) {
+                console.log("[Strava Auto Kudos] Réinitialisation des observateurs");
+                window.App.resetComponent('observers');
+            }
+        },
+
+        /**
+         * Désactive l'extension
+         */
+        async disable() {
+            console.log("[Strava Auto Kudos] Extension désactivée");
+            this.state.enabled = false;
+            this.state.pauseUntil = null;
+            this.state.isProcessing = false;
+            this.saveStateImmediate(); // Sauvegarde immédiate pour ce changement important
         }
     };
 

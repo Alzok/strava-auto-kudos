@@ -62,12 +62,6 @@ if (typeof window.DOMManager === 'undefined') {
         },
 
         /**
-         * Observateur de mutations
-         * @type {MutationObserver|null}
-         */
-        mutationObserver: null,
-
-        /**
          * Cache des éléments
          * @type {Map}
          */
@@ -77,142 +71,50 @@ if (typeof window.DOMManager === 'undefined') {
          * Initialise le gestionnaire DOM
          */
         init() {
-            this.setupMutationObserver();
             this.startPerformanceMonitoring();
+            this.startElementCacheCleanup();
         },
 
         /**
-         * Configure l'observateur de mutations
+         * Démarre le nettoyage périodique du cache d'éléments
          */
-        setupMutationObserver() {
-            if (this.mutationObserver) {
-                this.mutationObserver.disconnect();
-            }
-
-            this.mutationObserver = new MutationObserver(this.handleMutations.bind(this));
-            
-            const config = {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                characterData: true
-            };
-
-            const feedContainer = this.getFeedContainer();
-            if (feedContainer) {
-                this.mutationObserver.observe(feedContainer, config);
-            }
+        startElementCacheCleanup() {
+            // Nettoyage toutes les 5 minutes
+            setInterval(() => this.cleanupElementCache(), 300000);
         },
 
         /**
-         * Gère les mutations du DOM
-         * @param {MutationRecord[]} mutations - Les mutations observées
+         * Nettoie le cache des éléments DOM basé sur l'âge et la taille
          */
-        handleMutations(mutations) {
-            const startTime = Date.now();
+        cleanupElementCache() {
+            const now = Date.now();
+            const maxAge = 3600000; // 1 heure
+            const maxSize = 200; // Nombre maximum d'entrées dans le cache
             
-            try {
-                mutations.forEach(mutation => {
-                    this.performanceState.mutationCount++;
-                    
-                    // Vérifier les changements dans les entrées
-                    if (mutation.type === 'childList') {
-                        this.handleEntryChanges(mutation);
-                    }
-                    
-                    // Vérifier les changements dans les boutons kudos
-                    if (mutation.type === 'attributes' && mutation.target.matches(this.selectors.kudosButton)) {
-                        this.handleKudosButtonChange(mutation);
-                    }
-                });
-
-                // Mettre à jour les statistiques
-                const processingTime = Date.now() - startTime;
-                this.performanceState.totalMutationTime += processingTime;
+            console.log(`[Strava Auto Kudos] Nettoyage du cache d'éléments (taille actuelle: ${this.elementCache.size})`);
+            
+            // 1. Supprimer les entrées basées sur l'âge
+            let entriesRemoved = 0;
+            for (const [id, entry] of this.elementCache.entries()) {
+                if (now - entry.timestamp > maxAge) {
+                    this.elementCache.delete(id);
+                    entriesRemoved++;
+                }
+            }
+            
+            // 2. Si le cache est encore trop grand, supprimer les entrées les plus anciennes
+            if (this.elementCache.size > maxSize) {
+                const entries = Array.from(this.elementCache.entries())
+                    .sort((a, b) => a[1].timestamp - b[1].timestamp);
                 
-                this.performanceState.history.push({
-                    timestamp: Date.now(),
-                    type: 'mutation',
-                    count: mutations.length,
-                    processingTime
+                const entriesToRemove = entries.slice(0, this.elementCache.size - maxSize);
+                entriesToRemove.forEach(([id]) => {
+                    this.elementCache.delete(id);
+                    entriesRemoved++;
                 });
-
-                // Nettoyer l'historique si nécessaire
-                if (this.performanceState.history.length > this.performanceState.maxHistorySize) {
-                    this.performanceState.history.shift();
-                }
-
-                // Optimiser si nécessaire
-                if (Date.now() - this.performanceState.lastOptimization > this.performanceState.optimizationInterval) {
-                    this.optimize();
-                }
-            } catch (error) {
-                this.handleError(error, 'mutation handling');
             }
-        },
-
-        /**
-         * Gère les changements dans les entrées
-         * @param {MutationRecord} mutation - La mutation à traiter
-         */
-        handleEntryChanges(mutation) {
-            const addedNodes = Array.from(mutation.addedNodes)
-                .filter(node => node.nodeType === 1 && node.matches(this.selectors.feedEntry));
             
-            const removedNodes = Array.from(mutation.removedNodes)
-                .filter(node => node.nodeType === 1 && node.matches(this.selectors.feedEntry));
-
-            if (addedNodes.length > 0) {
-                this.handleNewEntries(addedNodes);
-            }
-
-            if (removedNodes.length > 0) {
-                this.handleRemovedEntries(removedNodes);
-            }
-        },
-
-        /**
-         * Gère les nouvelles entrées
-         * @param {Element[]} entries - Les nouvelles entrées
-         */
-        handleNewEntries(entries) {
-            entries.forEach(entry => {
-                const entryId = EntryProcessor.generateEntryId(entry);
-                if (!StateManager.hasProcessed(entryId)) {
-                    this.elementCache.set(entryId, {
-                        element: entry,
-                        timestamp: Date.now()
-                    });
-                }
-            });
-        },
-
-        /**
-         * Gère les entrées supprimées
-         * @param {Element[]} entries - Les entrées supprimées
-         */
-        handleRemovedEntries(entries) {
-            entries.forEach(entry => {
-                const entryId = EntryProcessor.generateEntryId(entry);
-                this.elementCache.delete(entryId);
-            });
-        },
-
-        /**
-         * Gère les changements dans les boutons kudos
-         * @param {MutationRecord} mutation - La mutation à traiter
-         */
-        handleKudosButtonChange(mutation) {
-            const button = mutation.target;
-            const entry = button.closest(this.selectors.feedEntry);
-            if (entry) {
-                const entryId = EntryProcessor.generateEntryId(entry);
-                const cachedEntry = this.elementCache.get(entryId);
-                if (cachedEntry) {
-                    cachedEntry.element = entry;
-                    cachedEntry.timestamp = Date.now();
-                }
-            }
+            console.log(`[Strava Auto Kudos] Nettoyage du cache terminé (${entriesRemoved} entrées supprimées, nouvelle taille: ${this.elementCache.size})`);
         },
 
         /**
@@ -375,44 +277,34 @@ if (typeof window.DOMManager === 'undefined') {
         },
 
         /**
-         * Récupère toutes les entrées du flux
-         * @returns {NodeList} Liste des entrées du flux
+         * Recherche les boutons kudos valides
+         * @returns {Array<Element>} Les boutons kudos valides
          */
-        getFeedEntries() {
-            const startTime = Date.now();
-            try {
-                console.log("[Strava Auto Kudos] Recherche des entrées du flux");
+        findFeedEntries() {
+            console.log("[Strava Auto Kudos] Recherche des boutons kudos");
+            
+            // Trouver tous les boutons kudos
+            const kudosButtons = document.querySelectorAll('button[data-testid="kudos_button"], .kudos-button, button[title*="kudos"], button[aria-label*="kudos"]');
+            console.log("[Strava Auto Kudos] Boutons kudos trouvés:", kudosButtons.length);
+            
+            // Filtrer pour ne garder que les boutons valides
+            const validButtons = Array.from(kudosButtons).filter(button => {
+                // Vérifier si le bouton est déjà kudosé
+                const isAlreadyKudosed = button.querySelector('svg[data-testid="filled_kudos"]') ||
+                                       button.querySelector('svg[fill="#fc5200"]') ||
+                                       button.querySelector('svg[class*="kudoed"]') ||
+                                       button.querySelector('svg[class*="filled"]') ||
+                                       button.querySelector('svg[class*="active"]') ||
+                                       button.querySelector('svg[class*="liked"]');
                 
-                // Essayer chaque sélecteur individuellement
-                const selectors = this.selectors.feedEntry.split(',').map(s => s.trim());
-                let entries = null;
+                // Vérifier si le bouton est cliquable
+                const isClickable = this.isButtonClickable(button);
                 
-                for (const selector of selectors) {
-                    console.log(`[Strava Auto Kudos] Essai du sélecteur: ${selector}`);
-                    const foundEntries = document.querySelectorAll(selector);
-                    
-                    if (foundEntries.length > 0) {
-                        console.log(`[Strava Auto Kudos] ${foundEntries.length} entrées trouvées avec le sélecteur: ${selector}`);
-                        entries = foundEntries;
-                        break;
-                    }
-                }
-                
-                if (!entries || entries.length === 0) {
-                    console.log("[Strava Auto Kudos] Aucune entrée trouvée");
-                    return document.querySelectorAll('*'); // Retourner une NodeList vide
-                }
-
-                const processingTime = Date.now() - startTime;
-                this.performanceState.queryCount++;
-                this.performanceState.totalQueryTime += processingTime;
-
-                return entries;
-            } catch (error) {
-                console.error("[Strava Auto Kudos] Erreur lors de la recherche des entrées:", error);
-                // En cas d'erreur, retourner une NodeList vide
-                return document.querySelectorAll('div[data-testid="web-feed-entry"]');
-            }
+                return !isAlreadyKudosed && isClickable;
+            });
+            
+            console.log("[Strava Auto Kudos] Boutons kudos valides trouvés:", validButtons.length);
+            return validButtons;
         },
 
         /**
@@ -437,35 +329,6 @@ if (typeof window.DOMManager === 'undefined') {
             }
             
             return kudosButton;
-        },
-
-        /**
-         * Vérifie si le kudos a déjà été donné
-         * @param {Element} kudosButton - Le bouton kudos
-         * @returns {boolean} true si le kudos a déjà été donné
-         */
-        isKudosFilled(kudosButton) {
-            if (!kudosButton) {
-                console.log("[Strava Auto Kudos] Pas de bouton kudos à vérifier");
-                return false;
-            }
-
-            // Vérifier si l'icône est remplie
-            const filledKudos = kudosButton.querySelector('svg[data-testid="filled_kudos"]');
-            if (filledKudos) {
-                console.log("[Strava Auto Kudos] Kudos déjà donné (icône remplie trouvée)");
-                return true;
-            }
-
-            // Vérifier si le titre indique que les kudos ont été donnés
-            const title = kudosButton.getAttribute('title');
-            if (title && title.includes("Afficher tous les kudos")) {
-                console.log("[Strava Auto Kudos] Kudos déjà donné (titre mis à jour)");
-                return true;
-            }
-
-            console.log("[Strava Auto Kudos] Kudos non donné");
-            return false;
         },
 
         /**
@@ -582,17 +445,143 @@ if (typeof window.DOMManager === 'undefined') {
 
         /**
          * Vérifie si un élément est visible dans le viewport
-         * @param {HTMLElement} element - L'élément à vérifier
+         * @param {Element} element - L'élément à vérifier
          * @returns {boolean} true si l'élément est visible
          */
-        isElementInViewport(element) {
+        isElementVisible(element) {
+            if (!element) return false;
+            
             const rect = element.getBoundingClientRect();
+            const style = window.getComputedStyle(element);
+            
             return (
                 rect.top >= 0 &&
                 rect.left >= 0 &&
                 rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-                rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+                rect.right <= (window.innerWidth || document.documentElement.clientWidth) &&
+                style.display !== 'none' &&
+                style.visibility !== 'hidden' &&
+                style.opacity !== '0'
             );
+        },
+
+        /**
+         * Trouve le bouton kudos dans une entrée
+         * @param {Element} entry - L'entrée à analyser
+         * @returns {Element|null} Le bouton kudos ou null
+         */
+        findKudosButton(entry) {
+            if (!entry) return null;
+            
+            // Essayer différents sélecteurs pour trouver le bouton kudos
+            const selectors = [
+                'button[data-testid="kudos_button"]',
+                '.kudos-button',
+                'button[title*="kudos"]',
+                'button[aria-label*="kudos"]',
+                'button[class*="kudos"]',
+                'button[class*="like"]',
+                'button[class*="give-kudos"]'
+            ];
+            
+            for (const selector of selectors) {
+                const button = entry.querySelector(selector);
+                if (button && this.isButtonClickable(button)) {
+                    return button;
+                }
+            }
+            
+            return null;
+        },
+
+        /**
+         * Vérifie si un bouton est déjà kudosé
+         * @param {Element} button - Le bouton à vérifier
+         * @returns {boolean} true si le bouton est déjà kudosé
+         */
+        isAlreadyKudosed(button) {
+            if (!button) {
+                console.log("[Strava Auto Kudos] Pas de bouton à vérifier");
+                return false;
+            }
+
+            // Vérifier l'icône remplie avec le sélecteur le plus stable
+            const filledKudos = button.querySelector('svg[data-testid="filled_kudos"]');
+            if (filledKudos) {
+                console.log("[Strava Auto Kudos] Kudos déjà donné (icône remplie trouvée)");
+                return true;
+            }
+
+            // Vérifier le titre du bouton
+            const title = button.getAttribute('title');
+            if (title && title.includes("Afficher tous les kudos")) {
+                console.log("[Strava Auto Kudos] Kudos déjà donné (titre mis à jour)");
+                return true;
+            }
+
+            console.log("[Strava Auto Kudos] Kudos non donné");
+            return false;
+        },
+
+        /**
+         * Vérifie si un bouton est cliquable
+         * @param {Element} button - Le bouton à vérifier
+         * @returns {boolean} true si le bouton est cliquable
+         */
+        isButtonClickable(button) {
+            if (!button) return false;
+            
+            const style = window.getComputedStyle(button);
+            
+            // Vérifier la visibilité
+            if (style.display === 'none' || 
+                style.visibility === 'hidden' || 
+                style.opacity === '0') {
+                return false;
+            }
+            
+            // Vérifier l'état du bouton
+            if (button.disabled || 
+                button.classList.contains('disabled') ||
+                button.getAttribute('aria-disabled') === 'true') {
+                return false;
+            }
+            
+            return true;
+        },
+
+        /**
+         * Fait défiler la page jusqu'à un élément
+         * @param {Element} element - L'élément à rendre visible
+         * @returns {Promise<void>}
+         */
+        async scrollToElement(element) {
+            if (!element) return;
+            
+            const rect = element.getBoundingClientRect();
+            const scrollY = window.scrollY + rect.top - 100; // 100px de marge en haut
+            
+            window.scrollTo({
+                top: scrollY,
+                behavior: 'smooth'
+            });
+            
+            // Attendre que le défilement soit terminé
+            await new Promise(resolve => setTimeout(resolve, 500));
+        },
+
+        /**
+         * Clique sur un élément
+         * @param {Element} element - L'élément à cliquer
+         * @returns {Promise<void>}
+         */
+        async clickElement(element) {
+            if (!element || !this.isButtonClickable(element)) {
+                throw new Error('Élément non cliquable');
+            }
+            
+            element.click();
+            await new Promise(resolve => setTimeout(resolve, 100));
         },
 
         /**

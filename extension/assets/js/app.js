@@ -472,12 +472,51 @@ if (typeof window.App === 'undefined') {
                     clearTimeout(debounceTimeout);
                     debounceTimeout = setTimeout(() => {
                         for (const mutation of mutationsList) {
-                            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                                Logger.debug('Nouvelles entrées détectées dans le flux');
-                                if (StateManager.isEnabled() && !StateManager.isPaused()) {
-                                    KudosManager.loopKudos();
+                            // Gérer les changements dans les entrées
+                            if (mutation.type === 'childList') {
+                                const addedNodes = Array.from(mutation.addedNodes)
+                                    .filter(node => node.nodeType === 1 && node.matches(DOMManager.selectors.feedEntry));
+                                const removedNodes = Array.from(mutation.removedNodes)
+                                    .filter(node => node.nodeType === 1 && node.matches(DOMManager.selectors.feedEntry));
+
+                                if (addedNodes.length > 0) {
+                                    // Mettre à jour le cache pour les nouvelles entrées
+                                    addedNodes.forEach(entry => {
+                                        const entryId = EntryProcessor.generateEntryId(entry);
+                                        if (!StateManager.hasProcessed(entryId)) {
+                                            DOMManager.elementCache.set(entryId, {
+                                                element: entry,
+                                                timestamp: Date.now()
+                                            });
+                                        }
+                                    });
+
+                                    // Démarrer le traitement si l'extension est active
+                                    if (StateManager.isEnabled() && !StateManager.isPaused()) {
+                                        KudosManager.startProcessing();
+                                    }
                                 }
-                                break;
+
+                                if (removedNodes.length > 0) {
+                                    // Nettoyer le cache pour les entrées supprimées
+                                    removedNodes.forEach(entry => {
+                                        const entryId = EntryProcessor.generateEntryId(entry);
+                                        DOMManager.elementCache.delete(entryId);
+                                    });
+                                }
+                            }
+
+                            // Gérer les changements dans les boutons kudos
+                            if (mutation.type === 'attributes' && mutation.target.matches(DOMManager.selectors.kudosButton)) {
+                                const entry = mutation.target.closest(DOMManager.selectors.feedEntry);
+                                if (entry) {
+                                    const entryId = EntryProcessor.generateEntryId(entry);
+                                    const cachedEntry = DOMManager.elementCache.get(entryId);
+                                    if (cachedEntry) {
+                                        cachedEntry.element = entry;
+                                        cachedEntry.timestamp = Date.now();
+                                    }
+                                }
                             }
                         }
                     }, 500); // Délai de debounce de 500ms
@@ -486,7 +525,7 @@ if (typeof window.App === 'undefined') {
                 this.observers.mutation.observe(targetNode, { 
                     childList: true, 
                     subtree: true,
-                    attributes: false // Désactiver l'observation des attributs pour de meilleures performances
+                    attributes: true // Activer l'observation des attributs pour le cache
                 });
                 
                 Logger.debug('Observateur de mutations configuré');
@@ -569,39 +608,109 @@ if (typeof window.App === 'undefined') {
 
         /**
          * Réinitialise un composant spécifique
-         * @param {string} componentName - Nom du composant à réinitialiser
-         * @returns {Promise<void>}
+         * @param {string} component - Le nom du composant à réinitialiser
          */
-        async resetComponent(componentName) {
-            Logger.info(`Réinitialisation du composant ${componentName}`);
+        resetComponent(component) {
+            console.log("[Strava Auto Kudos] Réinitialisation du composant:", component);
+            
+            switch (component) {
+                case 'observers':
+                    // Réinitialiser l'observateur de mutations principal
+                    if (this.observers.mutation) {
+                        this.observers.mutation.disconnect();
+                        this.observers.mutation = null;
+                    }
+                    // Reconfigurer l'observateur
+                    this.setupMutationObserver();
+                    console.log("[Strava Auto Kudos] Observateur de mutations réinitialisé");
+                    break;
+                    
+                case 'state':
+                    // Réinitialiser l'état
+                    StateManager.reset();
+                    break;
+                    
+                case 'ui':
+                    // Réinitialiser l'interface
+                    UI.updateUI();
+                    break;
+                
+                case 'processing':
+                    // Réinitialiser le traitement
+                    if (window.KudosManager && typeof window.KudosManager.resume === 'function') {
+                        window.KudosManager.resume();
+                    }
+                    console.log("[Strava Auto Kudos] Traitement réinitialisé");
+                    break;
+                    
+                case 'all':
+                    // Réinitialiser tous les composants
+                    this.resetComponent('observers');
+                    this.resetComponent('state');
+                    this.resetComponent('ui');
+                    this.resetComponent('processing');
+                    console.log("[Strava Auto Kudos] Tous les composants réinitialisés");
+                    break;
+                    
+                default:
+                    console.warn("[Strava Auto Kudos] Composant inconnu:", component);
+            }
+        },
+
+        /**
+         * Reprend le traitement après une pause ou une erreur
+         * Cette méthode coordonne toutes les actions nécessaires
+         * @returns {boolean} True si la reprise a réussi
+         */
+        resumeProcessing() {
+            console.log("[Strava Auto Kudos] Reprise globale du traitement");
             
             try {
-                switch (componentName.toLowerCase()) {
-                    case 'statemanager':
-                        StateManager.reset();
-                        break;
-                    case 'ui':
-                        await this.createUI();
-                        break;
-                    case 'delayoptimization':
-                        this.initDelayOptimization();
-                        break;
-                    case 'observers':
-                        this.cleanupObservers();
-                        this.setupObservers();
-                        break;
-                    case 'network':
-                        NetworkManager.clearConnectionCache();
-                        break;
-                    default:
-                        throw new Error(`Composant inconnu: ${componentName}`);
+                // 1. Vérifier que l'extension est activée
+                if (!StateManager.isEnabled()) {
+                    console.log("[Strava Auto Kudos] L'extension est désactivée, pas de reprise");
+                    return false;
                 }
                 
-                Logger.info(`Composant ${componentName} réinitialisé avec succès`);
-                this.emit('componentReset', { component: componentName });
+                // 2. Réinitialiser l'état de pause
+                if (StateManager.isPaused()) {
+                    console.log("[Strava Auto Kudos] Annulation de la pause");
+                    if (typeof StateManager.resume === 'function') {
+                        StateManager.resume();
+                    } else {
+                        // Fallback si resume n'existe pas
+                        StateManager.state.pauseUntil = null;
+                        StateManager.saveStateImmediate();
+                    }
+                }
+                
+                // 3. Réinitialiser le compteur d'erreurs
+                StateManager.resetErrorCount();
+                
+                // 4. Reprendre le traitement via KudosManager
+                if (KudosManager && typeof KudosManager.resume === 'function') {
+                    console.log("[Strava Auto Kudos] Reprise du traitement via KudosManager");
+                    KudosManager.resume();
+                }
+                
+                // 5. Réinitialiser les observateurs DOM
+                this.resetComponent('observers');
+                
+                // 6. Mettre à jour l'interface
+                if (UI && typeof UI.updateUI === 'function') {
+                    UI.updateUI();
+                }
+                
+                // 7. Émettre un événement de reprise
+                this.emit('processingResumed', {
+                    timestamp: Date.now(),
+                    source: 'manual'
+                });
+                
+                return true;
             } catch (error) {
-                StateManager.handleError(error, `réinitialisation du composant ${componentName}`);
-                throw error;
+                console.error("[Strava Auto Kudos] Erreur lors de la reprise du traitement:", error);
+                return false;
             }
         },
 
@@ -707,14 +816,12 @@ function initializeApp() {
         // Vérifier si le document est complètement chargé
         if (document.readyState === 'complete') {
             console.log("[Strava Auto Kudos] Document chargé, démarrage de l'initialisation...");
-            console.log("[Strava Auto Kudos] Tentative d'initialisation...");
-            window.App.init();
+            initializeWithRetry();
         } else {
             console.log("[Strava Auto Kudos] En attente du chargement complet...");
             window.addEventListener('load', () => {
                 console.log("[Strava Auto Kudos] Document chargé, démarrage de l'initialisation...");
-                console.log("[Strava Auto Kudos] Tentative d'initialisation...");
-                window.App.init();
+                initializeWithRetry();
             });
         }
     } catch (error) {
@@ -722,5 +829,85 @@ function initializeApp() {
     }
 }
 
+/**
+ * Initialise l'application avec mécanisme de retry
+ * @param {number} retryCount - Nombre de tentatives déjà effectuées
+ */
+function initializeWithRetry(retryCount = 0) {
+    try {
+        console.log(`[Strava Auto Kudos] Tentative d'initialisation (${retryCount + 1}/3)...`);
+        window.App.init();
+    } catch (error) {
+        console.error("[Strava Auto Kudos] Erreur d'initialisation:", error);
+        if (retryCount < 2) { // Jusqu'à 3 tentatives (0, 1, 2)
+            const delay = Math.pow(2, retryCount) * 1000; // Délai exponentiel: 1s, 2s, 4s
+            console.log(`[Strava Auto Kudos] Nouvelle tentative dans ${delay/1000}s...`);
+            setTimeout(() => initializeWithRetry(retryCount + 1), delay);
+        } else {
+            console.error("[Strava Auto Kudos] Échec après 3 tentatives, tentative de récupération d'urgence");
+            // Tentative de récupération d'urgence
+            try {
+                // Nettoyer les ressources existantes
+                if (window.App.cleanup) {
+                    window.App.cleanup();
+                }
+                // Réinitialiser les états globaux
+                if (window.StateManager && window.StateManager.reset) {
+                    window.StateManager.reset();
+                }
+                // Réessayer une dernière fois après nettoyage
+                setTimeout(() => {
+                    try {
+                        window.App.init();
+                    } catch (finalError) {
+                        console.error("[Strava Auto Kudos] Échec de la récupération d'urgence:", finalError);
+                    }
+                }, 5000);
+            } catch (recoveryError) {
+                console.error("[Strava Auto Kudos] Échec de la tentative de récupération:", recoveryError);
+            }
+        }
+    }
+}
+
 // Démarrer l'initialisation
 initializeApp();
+
+// Gestionnaire d'événements pour le bouton d'activation
+async function setupToggleButton() {
+    // Vérifier que les dépendances sont chargées
+    if (!window.StateManager || !window.UI) {
+        console.log("[Strava Auto Kudos] Dépendances non disponibles, attente...");
+        setTimeout(setupToggleButton, 1000);
+        return;
+    }
+
+    const container = document.getElementById('strava-auto-kudos-container');
+    if (!container) {
+        console.log("[Strava Auto Kudos] Conteneur non trouvé, nouvelle tentative dans 1 seconde");
+        setTimeout(setupToggleButton, 1000);
+        return;
+    }
+
+    const toggleButton = container.querySelector('.social_assistant_button');
+    if (!toggleButton) {
+        console.log("[Strava Auto Kudos] Bouton non trouvé, nouvelle tentative dans 1 seconde");
+        setTimeout(setupToggleButton, 1000);
+        return;
+    }
+
+    console.log("[Strava Auto Kudos] Bouton trouvé, configuration des événements");
+    toggleButton.addEventListener('click', async () => {
+        const isEnabled = StateManager.isEnabled();
+        if (isEnabled) {
+            await StateManager.disable();
+            UI.updateBubbleStatus(false);
+        } else {
+            await StateManager.enable();
+            UI.updateBubbleStatus(true);
+        }
+    });
+}
+
+// Démarrer la configuration du bouton
+setupToggleButton();

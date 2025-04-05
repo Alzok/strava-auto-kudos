@@ -10,15 +10,15 @@ if (typeof window.CONFIG === 'undefined') {
         // Sélecteurs DOM pour les éléments de l'interface
         selectors: {
             // Conteneur principal du flux d'activités
-            feedContainer: '.feature-feed',
+            feedContainer: '.feature-feed, [data-testid="web-feed"], div[class*="feed-container"], div[role="main"] > div > div',
             // Entrée du flux
-            feedEntry: '[data-testid="web-feed-entry"], .feed-entry',
+            feedEntry: '[data-testid="web-feed-entry"], [data-testid*="feed-entry"], .feed-entry, [data-activity-id], article[data-testid], div[data-entry-id]',
             // Bouton kudos
-            kudosButton: '[data-testid="kudos_button"], .kudos-button, button[aria-label*="kudos"], button[aria-label*="Kudos"]',
+            kudosButton: 'button[data-testid="kudos_button"], button[title*="kudos"], button[title*="Kudos"], .kudos-button, button[aria-label*="kudos"], button[aria-label*="Kudos"]',
             // Bouton kudos actif
-            activeKudos: '[data-testid="kudos_button"].activated, .kudos-button.activated, button[aria-label*="kudos"].activated, button[aria-label*="Kudos"].activated',
+            activeKudos: 'button[data-testid="kudos_button"] svg[data-testid="filled_kudos"], button[data-testid="kudos_button"].activated, .kudos-button.activated, button[aria-label*="kudos"].activated, button[aria-label*="Kudos"].activated',
             // Compteur de kudos
-            kudosCount: '[data-testid="kudos_count"], .kudos-count',
+            kudosCount: '[data-testid="kudos_count"], .kudos-count, span[title*="kudos"]',
             // Conteneur de l'extension
             container: '#strava-auto-kudos-container',
             // Bouton principal

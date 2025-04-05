@@ -1,112 +1,110 @@
 # Strava Auto Kudos
 
-Une extension Chrome qui automatise l'envoi de kudos sur Strava de manière intelligente et respectueuse des limites de l'API.
+Extension Chrome pour donner automatiquement des kudos aux activités de vos amis sur Strava.
 
 ## Fonctionnalités
 
-- 🚀 Envoi automatique de kudos sur les activités du flux
-- ⚡ Traitement asynchrone et optimisé des performances
-- 🛡️ Gestion robuste des erreurs avec système de pause progressif
-- 📊 Statistiques en temps réel des kudos envoyés
-- 🔄 Reprise automatique après les pauses
-- 🎯 Interface utilisateur intuitive
+- Donne automatiquement des kudos aux activités
+- Compteur de kudos dans la bulle de l'extension
+- Délais aléatoires entre les kudos
+- Gestion intelligente des erreurs
+- Interface simple et intuitive
 
 ## Installation
 
-1. Clonez ce dépôt :
-```bash
-git clone https://github.com/votre-username/strava-auto-kudos.git
+1. Téléchargez le fichier ZIP de l'extension
+2. Décompressez le fichier
+3. Ouvrez Chrome et allez dans `chrome://extensions/`
+4. Activez le "Mode développeur"
+5. Cliquez sur "Charger l'extension non empaquetée"
+6. Sélectionnez le dossier décompressé
+
+## Utilisation
+
+1. Allez sur votre flux d'activités Strava
+2. Cliquez sur l'icône de l'extension pour l'activer
+3. L'extension donnera automatiquement des kudos aux nouvelles activités
+4. Le compteur dans la bulle indique le nombre de kudos donnés
+
+## Flux de traitement
+
+```mermaid
+graph TD
+    A[Chargement de la page] --> B[Initialisation]
+    B --> C[Activation par l'utilisateur]
+    
+    C --> D[Détection des entrées]
+    D --> E{Validation}
+    
+    E -->|Non valide| F[Entrée ignorée]
+    E -->|Valide| G{Déjà kudosé?}
+    
+    G -->|Oui| F
+    G -->|Non| H[Attente délai aléatoire]
+    
+    H --> I[Clic sur le bouton]
+    I --> J[Attente confirmation]
+    
+    J -->|Succès| K[Inc. compteur]
+    J -->|Échec| L[Pause 10s]
+    
+    K --> M[Prochaine entrée]
+    L --> M
+    F --> M
+    M --> D
 ```
 
-2. Ouvrez Chrome et accédez à `chrome://extensions/`
-3. Activez le "Mode développeur"
-4. Cliquez sur "Charger l'extension non empaquetée"
-5. Sélectionnez le dossier `extension` du projet
+### Description du flux
 
-## Architecture
+1. **Initialisation**
+   - Chargement de la page Strava
+   - Initialisation des managers nécessaires
+   - Configuration des observateurs
 
-L'extension est structurée en plusieurs modules :
+2. **Activation**
+   - Attente de l'activation par l'utilisateur
+   - Démarrage du traitement des entrées
 
-### Core Modules
+3. **Détection et validation**
+   - Observation du flux d'activités
+   - Validation des entrées :
+     - Structure de l'entrée
+     - Attributs requis
+     - Âge de l'entrée (max 7 jours)
+     - Bouton kudos valide
 
-- **App** : Module principal d'initialisation
-- **StateManager** : Gestion centralisée de l'état
-- **KudosManager** : Gestion des kudos et des interactions avec Strava
-- **ErrorManager** : Gestion des erreurs et des pauses
-- **DOMManager** : Abstraction des interactions DOM
-- **NotificationManager** : Gestion des notifications
-- **UI** : Interface utilisateur
-- **Logger** : Système de logging
-- **Storage** : Gestion du stockage local
-- **Utils** : Fonctions utilitaires
+4. **Traitement des kudos**
+   - Si l'entrée est valide :
+     - Attente d'un délai aléatoire
+     - Clic sur le bouton kudos
+     - Attente de la confirmation
+     - Incrémentation du compteur
 
-### Configuration
+5. **Gestion des erreurs**
+   - Erreurs réseau : pause de 10 secondes
+   - Erreurs Strava : pause de 30 secondes
+   - Reprise automatique après la pause
 
-- **CONFIG** : Configuration centralisée (sélecteurs, délais, messages)
+### Points clés
 
-## Système de Pause
+- **Validation stricte** : Chaque entrée est validée avant traitement
+- **Gestion des erreurs** : Système de pause intelligent
+- **Interface** : Compteur de kudos en temps réel
+- **Résilience** : Reprise automatique après les erreurs
 
-L'extension utilise un système de pause progressif pour gérer les erreurs :
+## Configuration
 
-1. **LIGHT** (30s) : 1-2 erreurs
-2. **MEDIUM** (1min) : 3-4 erreurs
-3. **HEAVY** (5min) : 5-6 erreurs
-4. **CRITICAL** (24h) : 7+ erreurs
+L'extension utilise des paramètres par défaut optimisés :
+- Délais aléatoires entre les kudos
+- Âge maximum des entrées : 7 jours
+- Timeout de confirmation : 5 secondes
 
-## Performance
+## Sécurité
 
-- Traitement par lots de 5 entrées
-- Délais aléatoires entre les kudos (100-300ms)
-- Maximum 3 kudos simultanés
-- Système de retry (3 tentatives)
-- Nettoyage automatique des entrées traitées
-
-## Développement
-
-### Prérequis
-
-- Chrome Browser
-- Node.js (optionnel, pour les tests)
-
-### Structure du Projet
-
-```
-extension/
-├── assets/
-│   ├── css/
-│   ├── js/
-│   └── images/
-├── manifest.json
-└── README.md
-```
-
-### Tests
-
-```bash
-# À implémenter
-npm test
-```
-
-## Contribution
-
-1. Fork le projet
-2. Créez une branche (`git checkout -b feature/AmazingFeature`)
-3. Committez vos changements (`git commit -m 'Add some AmazingFeature'`)
-4. Push vers la branche (`git push origin feature/AmazingFeature`)
-5. Ouvrez une Pull Request
-
-## Licence
-
-Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
+- Vérification systématique des kudos déjà donnés
+- Délais aléatoires pour éviter la détection
+- Pas de stockage de données sensibles
 
 ## Support
 
-Pour toute question ou problème, veuillez ouvrir une issue sur GitHub.
-
-## Changelog
-
-### [1.0.0] - 2024-03-18
-- Version initiale
-- Système de pause progressif
-- Gestion optimisée des performances
-- Interface utilisateur améliorée
+Pour toute question ou problème, n'hésitez pas à ouvrir une issue sur GitHub.

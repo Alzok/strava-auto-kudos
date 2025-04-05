@@ -12,22 +12,9 @@ if (typeof window.KudosManager === 'undefined') {
          * @type {Object}
          */
         config: {
-            batchSize: 5,
-            minDelay: 100,
-            maxDelay: 300,
-            maxConcurrent: 3,
             retryDelay: 1000,
-            maxRetries: 3,
             domCheckInterval: 1000, // Intervalle de vérification du DOM
             maxDomChecks: 5, // Nombre maximum de vérifications du DOM
-            performance: {
-                maxBatchSize: 10,
-                minBatchSize: 2,
-                batchSizeAdjustment: 1,
-                performanceCheckInterval: 5000,
-                successThreshold: 0.8,
-                errorThreshold: 0.3
-            },
             errorHandling: {
                 maxConsecutiveErrors: 5,
                 errorCooldown: 30000, // 30 secondes
@@ -48,16 +35,10 @@ if (typeof window.KudosManager === 'undefined') {
         },
 
         /**
-         * État des performances
+         * État des erreurs
          * @type {Object}
          */
-        performanceState: {
-            lastCheck: 0,
-            currentBatchSize: 5,
-            successCount: 0,
-            errorCount: 0,
-            processingTime: 0,
-            isOptimizing: false,
+        errorState: {
             consecutiveErrors: 0,
             lastError: null,
             errorHistory: [],
@@ -67,107 +48,94 @@ if (typeof window.KudosManager === 'undefined') {
         /**
          * Initialise le gestionnaire de kudos
          */
-        init() {
+        async init() {
             console.log("[Strava Auto Kudos] Initialisation du gestionnaire de kudos");
             
-            // Vérifier si l'extension est activée
-            if (!StateManager.isEnabled()) {
-                console.log("[Strava Auto Kudos] Extension désactivée, pas de traitement");
-                return;
-            }
-
+            // Créer la bulle UI immédiatement
+            UI.createBubble();
+            
             // Attendre que le DOM soit chargé
             if (document.readyState === 'loading') {
                 console.log("[Strava Auto Kudos] DOM en cours de chargement, attente...");
-                document.addEventListener('DOMContentLoaded', () => this.startProcessing());
+                await this.waitForDOM();
             } else {
                 console.log("[Strava Auto Kudos] DOM déjà chargé, démarrage immédiat");
-                this.startProcessing();
             }
-        },
 
-        async startProcessing() {
-            console.log("[Strava Auto Kudos] Démarrage du traitement");
-            
-            // Attendre que les entrées soient chargées
-            console.log("[Strava Auto Kudos] Attente du chargement des entrées du flux...");
-            await this.waitForDOM();
-            
             // Démarrer le traitement
-            console.log("[Strava Auto Kudos] Lancement du traitement des entrées");
-            await this.processEntries();
+            console.log("[Strava Auto Kudos] Démarrage du traitement");
+            await this.startProcessing();
         },
 
         /**
-         * Analyse une erreur et détermine son type et sa sévérité
-         * @param {Error} error - L'erreur à analyser
-         * @returns {Object} Informations sur l'erreur
+         * Attend que le DOM soit chargé
+         * @returns {Promise<void>}
          */
-        analyzeError(error) {
-            const errorInfo = {
-                type: this.config.errorHandling.errorTypes.UNKNOWN,
-                severity: this.config.errorHandling.errorSeverity.LOW,
-                message: error.message || 'Erreur inconnue',
-                timestamp: Date.now(),
-                retryable: true
-            };
-
-            // Déterminer le type d'erreur
-            if (error.name === 'NetworkError' || error.message.includes('network')) {
-                errorInfo.type = this.config.errorHandling.errorTypes.NETWORK;
-                errorInfo.severity = this.config.errorHandling.errorSeverity.MEDIUM;
-            } else if (error.message.includes('429') || error.message.includes('rate limit')) {
-                errorInfo.type = this.config.errorHandling.errorTypes.RATE_LIMIT;
-                errorInfo.severity = this.config.errorHandling.errorSeverity.HIGH;
-                errorInfo.retryable = false;
-            } else if (error.message.includes('500') || error.message.includes('server')) {
-                errorInfo.type = this.config.errorHandling.errorTypes.SERVER;
-                errorInfo.severity = this.config.errorHandling.errorSeverity.MEDIUM;
-            } else if (error.message.includes('DOM') || error.message.includes('element')) {
-                errorInfo.type = this.config.errorHandling.errorTypes.DOM;
-                errorInfo.severity = this.config.errorHandling.errorSeverity.LOW;
-            }
-
-            return errorInfo;
+        waitForDOM() {
+            return new Promise((resolve) => {
+                if (document.readyState === 'complete') {
+                    resolve();
+                } else {
+                    window.addEventListener('load', resolve);
+                }
+            });
         },
 
         /**
-         * Gère une erreur et met à jour l'état en conséquence
+         * Démarre le traitement des entrées
+         */
+        async startProcessing() {
+            console.log("[Strava Auto Kudos] Démarrage du traitement des kudos");
+            
+            // Vérifier que l'extension est activée
+            if (!StateManager.isEnabled()) {
+                console.log("[Strava Auto Kudos] Extension désactivée, arrêt du traitement");
+                return;
+            }
+            
+            // Vérifier que l'extension n'est pas en pause
+            if (StateManager.isPaused()) {
+                console.log("[Strava Auto Kudos] Extension en pause, arrêt du traitement");
+                return;
+            }
+            
+            // Démarrer la boucle de traitement
+            this.loopKudos();
+        },
+
+        /**
+         * Gère une erreur
          * @param {Error} error - L'erreur à gérer
          * @param {string} context - Le contexte de l'erreur
          */
-        handleError(error, context) {
-            const errorInfo = this.analyzeError(error);
+        handleError(error, context = 'unknown') {
+            console.error("[Strava Auto Kudos] Erreur dans", context + ":", error);
             
-            // Mettre à jour l'historique des erreurs
-            this.performanceState.errorHistory.push(errorInfo);
-            if (this.performanceState.errorHistory.length > this.config.errorHandling.maxErrorHistory) {
-                this.performanceState.errorHistory.shift();
+            // Mettre à jour l'état des erreurs
+            this.errorState.consecutiveErrors++;
+            this.errorState.lastError = {
+                timestamp: Date.now(),
+                error: error,
+                context: context
+            };
+            
+            // Ajouter à l'historique
+            this.errorState.errorHistory.push(this.errorState.lastError);
+            if (this.errorState.errorHistory.length > this.errorState.maxErrorHistory) {
+                this.errorState.errorHistory.shift();
             }
-
-            // Mettre à jour les compteurs
-            this.performanceState.errorCount++;
-            this.performanceState.consecutiveErrors++;
-            this.performanceState.lastError = errorInfo;
-
-            // Logger l'erreur avec le contexte
-            Logger.error(`Erreur dans ${context}:`, {
-                type: errorInfo.type,
-                severity: errorInfo.severity,
-                message: errorInfo.message,
-                consecutiveErrors: this.performanceState.consecutiveErrors
-            });
-
+            
             // Gérer les erreurs consécutives
-            if (this.performanceState.consecutiveErrors >= this.config.errorHandling.maxConsecutiveErrors) {
+            if (this.errorState.consecutiveErrors >= this.config.errorHandling.maxConsecutiveErrors) {
                 this.handleConsecutiveErrors();
             }
-
-            // Émettre un événement d'erreur
-            App.emit('kudosError', {
-                error: errorInfo,
-                context,
-                stats: this.getPerformanceStats()
+            
+            // Logger l'erreur
+            Logger.error(error, {
+                type: this.config.errorHandling.errorTypes.UNKNOWN,
+                severity: this.config.errorHandling.errorSeverity.MEDIUM,
+                context: context,
+                consecutiveErrors: this.errorState.consecutiveErrors
             });
         },
 
@@ -176,7 +144,7 @@ if (typeof window.KudosManager === 'undefined') {
          */
         handleConsecutiveErrors() {
             const now = Date.now();
-            const lastErrorTime = this.performanceState.lastError?.timestamp || 0;
+            const lastErrorTime = this.errorState.lastError?.timestamp || 0;
             
             // Si on est dans la période de cooldown, on met en pause
             if (now - lastErrorTime < this.config.errorHandling.errorCooldown) {
@@ -184,411 +152,83 @@ if (typeof window.KudosManager === 'undefined') {
                 StateManager.pause(pauseDuration);
                 NotificationManager.showError(`Trop d'erreurs consécutives. Pause de ${Utils.formatDuration(pauseDuration)}`);
             }
-
-            // Réduire la taille du batch
-            this.performanceState.currentBatchSize = Math.max(
-                this.config.performance.minBatchSize,
-                this.performanceState.currentBatchSize - this.config.performance.batchSizeAdjustment
-            );
         },
-
-        /**
-         * Réinitialise le compteur d'erreurs consécutives
-         */
-        resetConsecutiveErrors() {
-            this.performanceState.consecutiveErrors = 0;
-            this.performanceState.lastError = null;
-        },
-
-        /**
-         * Récupère les statistiques de performance
-         * @returns {Object} Les statistiques
-         */
-        getPerformanceStats() {
-            return {
-                successCount: this.performanceState.successCount,
-                errorCount: this.performanceState.errorCount,
-                consecutiveErrors: this.performanceState.consecutiveErrors,
-                currentBatchSize: this.performanceState.currentBatchSize,
-                processingTime: this.performanceState.processingTime,
-                errorHistory: [...this.performanceState.errorHistory]
-            };
-        },
-
-        /**
-         * Active ou désactive les kudos automatiques
-         * @param {boolean} enabled - L'état souhaité
-         */
-        async toggleAutoKudos(enabled) {
-            try {
-                // Si on désactive, on arrête immédiatement
-                if (!enabled) {
-                    StateManager.setEnabled(false);
-                    return;
-                }
-
-                // Si on active, on vérifie d'abord l'état de pause
-                if (StateManager.isPaused()) {
-                    Logger.info('Extension en pause, activation différée');
-                    return;
-                }
-
-                // Vérifier la connexion réseau
-                if (!await NetworkManager.checkConnection()) {
-                    Logger.warn('Pas de connexion réseau, activation impossible');
-                    NotificationManager.showError('Pas de connexion réseau');
-                    return;
-                }
-
-                // Vérifier que le DOM est prêt
-                if (!await this.waitForDOM()) {
-                    Logger.warn('DOM non prêt, activation impossible');
-                    NotificationManager.showError('Page non chargée correctement');
-                    return;
-                }
-
-                StateManager.setEnabled(true);
-                await this.loopKudos();
-            } catch (error) {
-                Logger.error('Erreur lors de l\'activation des kudos:', error);
-                StateManager.handleError(error, 'toggle auto kudos');
-                NotificationManager.showError('Erreur lors de l\'activation des kudos');
-            }
-        },
-
-        /**
-         * Attend que le DOM soit prêt
-         * @returns {Promise<boolean>} true si le DOM est prêt
-         */
-        async waitForDOM() {
-            let checks = 0;
-            const maxChecks = 20; // Augmenter le nombre de vérifications
-            const checkInterval = 500; // Réduire l'intervalle pour des vérifications plus fréquentes
-
-            console.log("[Strava Auto Kudos] Attente du chargement des entrées du flux...");
-            
-            while (checks < maxChecks) {
-                const entries = DOMManager.getFeedEntries();
-                if (entries && entries.length > 0) {
-                    console.log(`[Strava Auto Kudos] ${entries.length} entrées trouvées`);
-                    return true;
-                }
-                
-                console.log("[Strava Auto Kudos] Aucune entrée trouvée, nouvelle tentative...");
-                await Utils.sleep(checkInterval);
-                checks++;
-            }
-            
-            console.warn("[Strava Auto Kudos] Timeout en attendant le chargement des entrées");
-            return false;
-        },
-
-        /**
-         * Charge plus d'entrées dans le flux
-         * @returns {Promise<boolean>} true si de nouvelles entrées ont été chargées
-         */
-        async loadMore() {
-            if (!StateManager.isEnabled() || StateManager.isPaused()) return false;
-
-            try {
-                return await NetworkManager.retryWithBackoff(async () => {
-                    const feedContainer = DOMManager.getFeedContainer();
-                    if (!feedContainer) {
-                        Logger.warn('Conteneur du flux non trouvé');
-                        return false;
-                    }
-
-                    const scrollHeight = feedContainer.scrollHeight;
-                    feedContainer.scrollTo(0, scrollHeight);
-                    await Utils.sleep(1000);
-
-                    const newScrollHeight = feedContainer.scrollHeight;
-                    if (newScrollHeight <= scrollHeight) {
-                        Logger.debug('Aucune nouvelle entrée chargée');
-                        return false;
-                    }
-
-                    Logger.debug('Nouvelles entrées chargées');
-                    return true;
-                });
-            } catch (error) {
-                Logger.error('Erreur lors du chargement des entrées:', error);
-                return false;
-            }
-        },
-
-        /**
-         * Traite les entrées par lots
-         * @param {Array<Element>} entries - Les entrées à traiter
-         * @returns {Promise<void>}
-         */
-        async processBatch(entries) {
-            if (!entries.length) return { success: true, processed: 0 };
-
-            const startTime = Date.now();
-            const batchSize = Math.min(this.performanceState.currentBatchSize, entries.length);
-            const batch = entries.slice(0, batchSize);
-            const results = [];
-            let successCount = 0;
-
-            // Traiter les entrées en parallèle avec un délai entre chaque
-            for (const entry of batch) {
-                if (!StateManager.isEnabled() || StateManager.isPaused()) break;
-
-                const entryId = this.getEntryId(entry);
-                if (StateManager.hasProcessed(entryId)) continue;
-
-                try {
-                    const result = await this.processEntry(entry);
-                    results.push(result);
-                    if (result) successCount++;
-                } catch (error) {
-                    results.push(false);
-                    console.error('Erreur lors du traitement de l\'entrée:', error);
-                }
-
-                // Ajouter un délai entre chaque entrée
-                await Utils.sleep(Utils.randomIntFromInterval(
-                    StateManager.state.delays.min,
-                    StateManager.state.delays.max
-                ));
-            }
-
-            // Mettre à jour les métriques de performance
-            const processingTime = Date.now() - startTime;
-            this.updatePerformanceMetrics(successCount > 0, processingTime);
-
-            return {
-                success: true,
-                processed: results.length,
-                successCount,
-                results
-            };
-        },
-
-        /**
-         * Traite une entrée individuelle
-         * @param {Element} entry - L'entrée à traiter
-         * @returns {Promise<boolean>} true si le traitement a réussi
-         */
-        async processEntry(entry) {
-            try {
-                console.log("[Strava Auto Kudos] Début du traitement d'une entrée");
-                
-                // Récupérer le bouton kudos avec le sélecteur data-testid
-                const kudosButton = entry.querySelector('button[data-testid="kudos_button"]');
-                if (!kudosButton) {
-                    console.log("[Strava Auto Kudos] Bouton kudos non trouvé dans l'entrée");
-                    throw new Error('Bouton kudos non trouvé');
-                }
-
-                console.log("[Strava Auto Kudos] Bouton kudos trouvé, analyse détaillée:");
-                console.log("[Strava Auto Kudos] Classes du bouton:", kudosButton.className);
-                console.log("[Strava Auto Kudos] Attributs du bouton:", {
-                    disabled: kudosButton.disabled,
-                    title: kudosButton.getAttribute('title'),
-                    dataTestId: kudosButton.getAttribute('data-testid')
-                });
-
-                // Vérifier si déjà kudos en cherchant l'icône remplie
-                const filledKudos = kudosButton.querySelector('svg[data-testid="filled_kudos"]');
-                if (filledKudos) {
-                    console.log("[Strava Auto Kudos] Kudos déjà donné pour cette entrée (icône remplie trouvée)");
-                    return true;
-                }
-
-                // Vérifier si le bouton est cliquable
-                if (!this.isButtonClickable(kudosButton)) {
-                    console.log("[Strava Auto Kudos] Bouton non cliquable (peut-être hors de l'écran ou masqué)");
-                    throw new Error('Bouton non cliquable');
-                }
-
-                console.log("[Strava Auto Kudos] Tentative de clic sur le bouton kudos");
-                // Simuler le clic sur le bouton
-                kudosButton.click();
-
-                // Attendre la confirmation avec timeout
-                console.log("[Strava Auto Kudos] Attente de la confirmation du kudos");
-                const success = await this.waitForKudosConfirmation(kudosButton);
-                if (success) {
-                    console.log("[Strava Auto Kudos] Kudos confirmé avec succès");
-                    return true;
-                }
-
-                console.log("[Strava Auto Kudos] Échec de la confirmation du kudos");
-                return false;
-            } catch (error) {
-                console.error("[Strava Auto Kudos] Erreur lors du traitement de l'entrée:", error);
-                return false;
-            }
-        },
-
-        /**
-         * Met à jour les métriques de performance
-         * @param {boolean} success - Si le traitement a réussi
-         * @param {number} processingTime - Temps de traitement en ms
-         */
-        updatePerformanceMetrics(success, processingTime) {
-            const now = Date.now();
-            if (success) {
-                this.performanceState.successCount++;
-            } else {
-                this.performanceState.errorCount++;
-            }
-            this.performanceState.processingTime += processingTime;
-
-            if (now - this.performanceState.lastCheck >= this.config.performance.performanceCheckInterval) {
-                this.optimizeBatchSize();
-                this.performanceState.lastCheck = now;
-                this.performanceState.successCount = 0;
-                this.performanceState.errorCount = 0;
-                this.performanceState.processingTime = 0;
-            }
-        },
-
-        /**
-         * Optimise la taille des lots en fonction des performances
-         */
-        optimizeBatchSize() {
-            if (this.performanceState.isOptimizing) return;
-            this.performanceState.isOptimizing = true;
-
-            const totalAttempts = this.performanceState.successCount + this.performanceState.errorCount;
-            if (totalAttempts < 10) {
-                this.performanceState.isOptimizing = false;
-                return;
-            }
-
-            const successRate = this.performanceState.successCount / totalAttempts;
-            const avgProcessingTime = this.performanceState.processingTime / totalAttempts;
-
-            if (successRate >= this.config.performance.successThreshold && avgProcessingTime < 1000) {
-                // Augmenter la taille du lot si les performances sont bonnes
-                this.performanceState.currentBatchSize = Math.min(
-                    this.performanceState.currentBatchSize + this.config.performance.batchSizeAdjustment,
-                    this.config.performance.maxBatchSize
-                );
-                Logger.debug(`Performance optimale, augmentation de la taille du lot à ${this.performanceState.currentBatchSize}`);
-            } else if (successRate <= this.config.performance.errorThreshold || avgProcessingTime > 2000) {
-                // Réduire la taille du lot si les performances sont mauvaises
-                this.performanceState.currentBatchSize = Math.max(
-                    this.performanceState.currentBatchSize - this.config.performance.batchSizeAdjustment,
-                    this.config.performance.minBatchSize
-                );
-                Logger.debug(`Performance dégradée, réduction de la taille du lot à ${this.performanceState.currentBatchSize}`);
-            }
-
-            this.performanceState.isOptimizing = false;
-        },
-
-        /**
-         * Gère l'événement de défilement
-         */
-        handleScroll: Utils.debounce(async () => {
-            if (!StateManager.isEnabled() || StateManager.isPaused()) return;
-            
-            try {
-                const feedContainer = DOMManager.getFeedContainer();
-                if (!feedContainer) {
-                    Logger.warn('Conteneur du flux non trouvé lors du défilement');
-                    return;
-                }
-
-                const { scrollTop, scrollHeight, clientHeight } = feedContainer;
-                if (scrollHeight - scrollTop - clientHeight < 100) {
-                    await KudosManager.loadMore();
-                }
-            } catch (error) {
-                Logger.error('Erreur lors du défilement:', error);
-            }
-        }, 500),
 
         /**
          * Boucle principale de traitement des kudos
          */
         async loopKudos() {
-            if (!StateManager.isEnabled() || StateManager.isPaused()) return;
-
+            console.log("[Strava Auto Kudos] Début de la boucle de traitement");
+            
             try {
-                StateManager.setProcessing(true);
-                const entries = Array.from(DOMManager.getFeedEntries())
-                    .filter(entry => EntryProcessor.isValidEntry(entry));
-                
-                if (entries.length === 0) {
-                    Logger.info('Aucune entrée valide trouvée');
+                // Vérifier que l'extension est toujours active et non en pause
+                if (!StateManager.isEnabled() || StateManager.isPaused()) {
+                    console.log("[Strava Auto Kudos] Extension désactivée ou en pause, arrêt de la boucle");
                     return;
                 }
-
-                Logger.info(`${entries.length} entrées valides trouvées`);
                 
-                for (let i = 0; i < entries.length; i += this.performanceState.currentBatchSize) {
-                    // Vérifier l'état de pause à chaque lot
-                    if (StateManager.isPaused()) {
-                        Logger.info('Traitement mis en pause');
-                        break;
-                    }
-
-                    // Vérifier la connexion réseau
-                    if (!await NetworkManager.checkConnection()) {
-                        Logger.warn('Connexion réseau perdue, pause du traitement');
-                        StateManager.pause(30000); // Pause de 30 secondes
-                        break;
-                    }
-
-                    const batch = entries.slice(i, i + this.performanceState.currentBatchSize);
-                    await this.processBatch(batch);
+                // Trouver les entrées à traiter
+                const entries = DOMManager.findFeedEntries();
+                console.log("[Strava Auto Kudos] Entrées trouvées:", entries.length);
+                
+                if (entries.length === 0) {
+                    console.log("[Strava Auto Kudos] Aucune entrée à traiter, nouvelle tentative dans", this.config.retryDelay, "ms");
+                    setTimeout(() => this.loopKudos(), this.config.retryDelay);
+                    return;
                 }
+                
+                // Traiter chaque entrée
+                let successCount = 0;
+                for (const entry of entries) {
+                    if (!StateManager.isEnabled() || StateManager.isPaused()) {
+                        break;
+                    }
+                    
+                    const success = await EntryProcessor.processEntry(entry);
+                    if (success) {
+                        successCount++;
+                        this.errorState.consecutiveErrors = 0;
+                    }
+                }
+                
+                // Continuer la boucle même si aucune entrée n'a été traitée avec succès
+                setTimeout(() => this.loopKudos(), this.config.retryDelay);
             } catch (error) {
-                Logger.error('Erreur lors du traitement des kudos:', error);
-                StateManager.handleError(error, 'envoi des kudos');
-                NotificationManager.showError('Erreur lors du traitement des kudos');
-            } finally {
-                StateManager.setProcessing(false);
+                console.error("[Strava Auto Kudos] Erreur dans la boucle de traitement:", error);
+                this.handleError(error);
+                
+                // Continuer la boucle même en cas d'erreur
+                setTimeout(() => this.loopKudos(), this.config.retryDelay);
             }
         },
 
-        async processEntries() {
-            console.log("[Strava Auto Kudos] Début du traitement des entrées");
-            
-            if (!StateManager.isEnabled()) {
-                console.log("[Strava Auto Kudos] Extension désactivée, arrêt du traitement");
-                return;
-            }
-
-            if (StateManager.isPaused()) {
-                console.log("[Strava Auto Kudos] Extension en pause, arrêt du traitement");
-                return;
-            }
-
-            const entries = DOMManager.getFeedEntries();
-            console.log(`[Strava Auto Kudos] ${entries.length} entrées trouvées à traiter`);
-
-            if (!entries.length) {
-                console.log("[Strava Auto Kudos] Aucune entrée à traiter");
-                return;
-            }
-
+        /**
+         * Reprend le traitement après une pause
+         */
+        resume() {
+            console.log("[Strava Auto Kudos] Reprise du traitement");
             try {
-                // Utiliser EntryProcessor pour traiter les entrées
-                const result = await EntryProcessor.processBatch(Array.from(entries));
-                console.log(`[Strava Auto Kudos] Résultat du traitement:`, {
-                    traitées: result.processed,
-                    réussies: result.successCount,
-                    total: entries.length
-                });
-
-                // Mettre à jour le compteur
-                if (result.successCount > 0) {
-                    const newCount = StateManager.state.kudosCount + result.successCount;
-                    StateManager.updateKudosCount(newCount);
-                    UI.updateKudosCounter(newCount);
+                // Réinitialiser l'état de pause via StateManager
+                if (typeof StateManager.resume === 'function') {
+                    StateManager.resume();
+                } else {
+                    // Fallback si resume n'existe pas
+                    StateManager.state.pauseUntil = null;
+                    StateManager.saveStateImmediate();
                 }
+                
+                // Réinitialiser les compteurs d'erreurs
+                this.errorState.consecutiveErrors = 0;
+                this.errorState.errorHistory = [];
+                
+                // Redémarrer le traitement
+                this.startProcessing();
+                
+                console.log("[Strava Auto Kudos] Reprise du traitement effectuée avec succès");
             } catch (error) {
-                console.error("[Strava Auto Kudos] Erreur lors du traitement des entrées:", error);
-                await StateManager.pause(5000); // Pause de 5 secondes en cas d'erreur
+                console.error("[Strava Auto Kudos] Erreur lors de la reprise du traitement:", error);
+                this.handleError(error, 'resume');
             }
-
-            console.log("[Strava Auto Kudos] Traitement des entrées terminé");
         }
     };
     console.log("[Strava Auto Kudos] Module KudosManager initialisé");

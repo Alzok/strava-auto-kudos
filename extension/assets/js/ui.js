@@ -8,6 +8,37 @@ console.log("[Strava Auto Kudos] UI module loading");
 if (typeof window.UI === 'undefined') {
     window.UI = {
         /**
+         * Classes CSS utilisées
+         * @type {Object}
+         */
+        classes: {
+            container: 'strava-auto-kudos-container',
+            counter: 'strava-auto-kudos-counter',
+            button: 'social_assistant_button',
+            dropdown: 'dropdown',
+            status: 'status'
+        },
+        
+        /**
+         * Référence aux gestionnaires d'événements pour pouvoir les nettoyer
+         * @type {Object}
+         * @private
+         */
+        _eventHandlers: {
+            mainButton: null,
+            dropdown: null,
+            dropdownOptions: [],
+            kudosAdded: null
+        },
+        
+        /**
+         * Indicateur d'initialisation
+         * @type {boolean}
+         * @private
+         */
+        _isInitialized: false,
+
+        /**
          * Vérifie si un élément existe dans le DOM
          * @param {string} selector - Le sélecteur CSS
          * @returns {Element|null} L'élément trouvé ou null
@@ -51,14 +82,11 @@ if (typeof window.UI === 'undefined') {
                 }
                 console.log("[Strava Auto Kudos] DOM complètement chargé");
 
-                // Attendre un peu plus longtemps pour s'assurer que tout est bien initialisé
-                await new Promise(resolve => setTimeout(resolve, 2000));
-
                 // Vérifier si la bulle existe déjà
                 let existingContainer = this.getElement('#strava-auto-kudos-container');
                 if (existingContainer) {
-                    console.log("[Strava Auto Kudos] Bulle déjà existante");
-                    return existingContainer;
+                    console.log("[Strava Auto Kudos] Bulle déjà existante, nettoyage préalable");
+                    this.cleanup();
                 }
 
                 // Vérifier que Templates est disponible
@@ -73,22 +101,14 @@ if (typeof window.UI === 'undefined') {
                 container.innerHTML = window.Templates.bubble();
                 
                 // Ajouter le conteneur au body
-                document.body.appendChild(container.firstElementChild);
-                
-                // Attendre un peu que le DOM soit mis à jour
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                // Vérifier que la bulle a été créée correctement
-                existingContainer = this.getElement('#strava-auto-kudos-container');
-                if (!existingContainer) {
-                    throw new Error('La bulle n\'a pas été créée correctement');
-                }
+                const bubbleElement = container.firstElementChild;
+                document.body.appendChild(bubbleElement);
                 
                 // Configurer les événements
-                this.setupEventListeners(existingContainer);
+                this.setupEventListeners(bubbleElement);
                 
                 console.log("[Strava Auto Kudos] Bulle créée avec succès");
-                return existingContainer;
+                return bubbleElement;
             } catch (error) {
                 console.error("[Strava Auto Kudos] Erreur lors de la création de la bulle:", error);
                 if (window.StateManager) {
@@ -104,6 +124,10 @@ if (typeof window.UI === 'undefined') {
          */
         setupEventListeners(container) {
             console.log("[Strava Auto Kudos] Configuration des événements");
+            
+            // Nettoyer les gestionnaires d'événements existants
+            this.removeEventHandlers();
+            
             const button = container.querySelector('.social_assistant_button');
             const dropdown = container.querySelector('.dropdown');
             
@@ -113,30 +137,41 @@ if (typeof window.UI === 'undefined') {
             }
 
             // Gestionnaire du bouton principal
-            button.addEventListener('click', () => {
+            this._eventHandlers.mainButton = () => {
                 console.log("[Strava Auto Kudos] Clic sur le bouton");
                 const isEnabled = StateManager.isEnabled();
-                StateManager.setEnabled(!isEnabled);
-                this.updateBubbleStatus(!isEnabled);
-            });
+                if (isEnabled) {
+                    // Si l'extension est activée, on la désactive
+                    StateManager.disable();
+                    this.updateBubbleStatus(false);
+                } else {
+                    // Si l'extension est désactivée, on l'active et on reprend le traitement
+                    StateManager.enable();
+                    this.updateBubbleStatus(true);
+                }
+            };
+            button.addEventListener('click', this._eventHandlers.mainButton);
 
             // Gestionnaire du dropdown
-            dropdown.addEventListener('click', (e) => {
+            this._eventHandlers.dropdown = (e) => {
                 console.log("[Strava Auto Kudos] Clic sur le dropdown");
                 e.stopPropagation();
                 
                 // Fermer le dropdown si on clique en dehors
-                document.addEventListener('click', (e) => {
+                const outsideClickHandler = (e) => {
                     if (!dropdown.contains(e.target)) {
                         dropdown.classList.remove('active');
                     }
-                }, { once: true });
-            });
+                };
+                
+                document.addEventListener('click', outsideClickHandler, { once: true });
+            };
+            dropdown.addEventListener('click', this._eventHandlers.dropdown);
 
             // Gestionnaire des options du dropdown
             const dropdownOptions = dropdown.querySelectorAll('.dropdown-option');
             dropdownOptions.forEach(option => {
-                option.addEventListener('click', (e) => {
+                const handler = (e) => {
                     e.stopPropagation();
                     const action = option.dataset.action;
                     
@@ -145,7 +180,23 @@ if (typeof window.UI === 'undefined') {
                             StateManager.pause(300000); // 5 minutes
                             break;
                         case 'resume':
-                            StateManager.resume();
+                            // Utiliser la fonction unifiée de reprise si disponible
+                            if (window.App && typeof window.App.resumeProcessing === 'function') {
+                                window.App.resumeProcessing();
+                            } else {
+                                // Fallback: méthode traditionnelle
+                                if (StateManager.resume) {
+                                    StateManager.resume();
+                                }
+                                // S'assurer que KudosManager reprend aussi
+                                if (window.KudosManager && window.KudosManager.resume) {
+                                    window.KudosManager.resume();
+                                }
+                                // Réinitialiser les observateurs
+                                if (window.App && window.App.resetComponent) {
+                                    window.App.resetComponent('observers');
+                                }
+                            }
                             break;
                         case 'reset':
                             StateManager.reset();
@@ -155,8 +206,65 @@ if (typeof window.UI === 'undefined') {
                     }
                     
                     dropdown.classList.remove('active');
+                    this.updateUI();
+                };
+                
+                option.addEventListener('click', handler);
+                this._eventHandlers.dropdownOptions.push({
+                    element: option,
+                    handler: handler
                 });
             });
+            
+            // Configurer l'écouteur d'événement pour kudosAdded
+            if (window.App) {
+                this._eventHandlers.kudosAdded = (count) => {
+                    this.updateKudosCounterUI(count);
+                    this.showKudosAnimation();
+                };
+                window.App.on('kudosAdded', this._eventHandlers.kudosAdded);
+            }
+        },
+        
+        /**
+         * Supprime les gestionnaires d'événements
+         */
+        removeEventHandlers() {
+            console.log("[Strava Auto Kudos] Suppression des écouteurs d'événements");
+            
+            // Supprimer l'écouteur du bouton principal
+            if (this._eventHandlers.mainButton) {
+                const button = this.getElement('.social_assistant_button');
+                if (button) {
+                    button.removeEventListener('click', this._eventHandlers.mainButton);
+                }
+                this._eventHandlers.mainButton = null;
+            }
+            
+            // Supprimer l'écouteur du dropdown
+            if (this._eventHandlers.dropdown) {
+                const dropdown = this.getElement('.dropdown');
+                if (dropdown) {
+                    dropdown.removeEventListener('click', this._eventHandlers.dropdown);
+                }
+                this._eventHandlers.dropdown = null;
+            }
+            
+            // Supprimer les écouteurs des options du dropdown
+            if (this._eventHandlers.dropdownOptions.length > 0) {
+                this._eventHandlers.dropdownOptions.forEach(({element, handler}) => {
+                    if (element) {
+                        element.removeEventListener('click', handler);
+                    }
+                });
+                this._eventHandlers.dropdownOptions = [];
+            }
+            
+            // Supprimer l'écouteur de kudosAdded
+            if (this._eventHandlers.kudosAdded && window.App) {
+                window.App.off('kudosAdded', this._eventHandlers.kudosAdded);
+                this._eventHandlers.kudosAdded = null;
+            }
         },
 
         /**
@@ -213,8 +321,8 @@ if (typeof window.UI === 'undefined') {
                 }
             } else {
                 const container = this.getElement('#strava-auto-kudos-container');
-                if (container) {
-                    container.insertAdjacentHTML('beforeend', Templates.pauseTimer(timeString));
+                if (container && window.Templates && typeof window.Templates.pauseTimer === 'function') {
+                    container.insertAdjacentHTML('beforeend', window.Templates.pauseTimer(timeString));
                 }
             }
         },
@@ -223,36 +331,52 @@ if (typeof window.UI === 'undefined') {
          * Met à jour le compteur de kudos
          * @param {number} count - Le nombre de kudos
          */
-        updateKudosCount(count) {
-            console.log("[Strava Auto Kudos] Mise à jour du compteur:", count);
+        updateKudosCounterUI(count) {
+            console.log("[Strava Auto Kudos] Mise à jour du compteur UI:", count);
             const container = this.getElement('#strava-auto-kudos-container');
-            if (!container) return;
+            if (!container) {
+                console.log("[Strava Auto Kudos] Conteneur non trouvé pour la mise à jour du compteur");
+                return;
+            }
 
             const counter = container.querySelector('.kudos-counter');
-            if (counter) {
-                counter.textContent = count;
-                counter.title = `${count} kudos donnés`;
+            if (!counter) {
+                console.log("[Strava Auto Kudos] Compteur non trouvé");
+                return;
             }
+
+            counter.textContent = count;
+            counter.title = `${count} kudos donnés`;
+            
+            // Ajouter une animation
+            counter.classList.add('updated');
+            setTimeout(() => {
+                counter.classList.remove('updated');
+            }, 500);
         },
 
         /**
-         * Nettoie l'interface
+         * Met à jour le compteur de kudos
+         * @param {number} count - Le nombre de kudos
+         * @deprecated Utiliser updateKudosCounterUI à la place
+         */
+        updateKudosCount(count) {
+            console.log("[Strava Auto Kudos] updateKudosCount est déprécié, utiliser updateKudosCounterUI à la place");
+            this.updateKudosCounterUI(count);
+        },
+
+        /**
+         * Nettoie les ressources créées par l'UI
          */
         cleanup() {
-            console.log("[Strava Auto Kudos] Nettoyage de l'interface");
+            console.log("[Strava Auto Kudos] Nettoyage des ressources UI");
+            
+            // Supprimer les écouteurs d'événements
+            this.removeEventHandlers();
+            
+            // Supprimer les éléments DOM
             const container = this.getElement('#strava-auto-kudos-container');
             if (container) {
-                // Nettoyer les événements
-                const button = container.querySelector('.social_assistant_button');
-                const dropdown = container.querySelector('.dropdown');
-                if (button) {
-                    button.replaceWith(button.cloneNode(true));
-                }
-                if (dropdown) {
-                    dropdown.replaceWith(dropdown.cloneNode(true));
-                }
-                
-                // Supprimer le conteneur
                 container.remove();
             }
             
@@ -260,6 +384,8 @@ if (typeof window.UI === 'undefined') {
             if (notifications) {
                 notifications.remove();
             }
+            
+            this._isInitialized = false;
         },
 
         /**
@@ -267,16 +393,24 @@ if (typeof window.UI === 'undefined') {
          */
         async init() {
             console.log("[Strava Auto Kudos] Initialisation de l'interface utilisateur");
+            
+            // Éviter une double initialisation
+            if (this._isInitialized) {
+                console.log("[Strava Auto Kudos] L'interface est déjà initialisée, nettoyage préalable");
+                this.cleanup();
+            }
+            
             try {
                 // Créer la bulle d'interface
                 await this.createBubble();
                 
                 // Initialiser le compteur de kudos
-                this.updateKudosCount(StateManager.getKudosCount());
+                this.updateKudosCounterUI(StateManager.getKudosCount());
                 
                 // Mettre à jour l'état du bouton
                 this.updateBubbleStatus(StateManager.isEnabled());
                 
+                this._isInitialized = true;
                 console.log("[Strava Auto Kudos] Interface utilisateur initialisée avec succès");
             } catch (error) {
                 console.error("[Strava Auto Kudos] Erreur lors de l'initialisation de l'interface:", error);
@@ -305,6 +439,63 @@ if (typeof window.UI === 'undefined') {
             console.log("[Strava Auto Kudos] Aucune pause active");
             return false;
         },
+
+        /**
+         * Affiche l'animation +1 pour le kudos
+         */
+        showKudosAnimation() {
+            console.log("[Strava Auto Kudos] Affichage de l'animation +1");
+            const container = this.getElement('#strava-auto-kudos-container');
+            if (!container) {
+                console.log("[Strava Auto Kudos] Conteneur non trouvé pour l'animation");
+                return;
+            }
+
+            const animation = document.createElement('div');
+            animation.className = 'kudos-animation';
+            animation.textContent = '+1';
+            container.appendChild(animation);
+
+            // Supprimer l'animation après 1 seconde
+            setTimeout(() => {
+                if (animation.parentNode) {
+                    animation.remove();
+                }
+            }, 1000);
+        },
+
+        /**
+         * Met à jour l'interface
+         */
+        updateUI() {
+            console.log("[Strava Auto Kudos] Mise à jour de l'interface");
+            const isEnabled = StateManager.isEnabled();
+            this.updateBubbleStatus(isEnabled);
+            this.updateKudosCounterUI(StateManager.getKudosCount());
+        },
+
+        /**
+         * Gère le clic sur le bouton play
+         */
+        handlePlayClick() {
+            console.log("[Strava Auto Kudos] Clic sur le bouton play");
+            
+            // Utiliser la fonction unifiée de reprise via App si disponible
+            if (window.App && typeof window.App.resumeProcessing === 'function') {
+                const success = window.App.resumeProcessing();
+                
+                if (!success) {
+                    // Si échec de reprise, activer simplement l'extension
+                    StateManager.enable();
+                }
+            } else {
+                // Fallback: activer l'extension
+                StateManager.enable();
+            }
+            
+            // Mettre à jour l'interface 
+            this.updateUI();
+        }
     };
     console.log("[Strava Auto Kudos] Module UI initialisé");
 }
