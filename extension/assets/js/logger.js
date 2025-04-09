@@ -40,7 +40,7 @@ const Logger = {
 };
 
 // Initialisation automatique du Logger au chargement du script
-Logger.init();
+// Logger.init(); // Supprimer cet appel car la fonction n'existe pas/plus
 // console.log("[Strava Auto Kudos] Logger initialized successfully");
 
 // Exporter le module de logging
