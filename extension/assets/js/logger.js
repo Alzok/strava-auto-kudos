@@ -1,7 +1,7 @@
 /**
  * Module pour la gestion des logs
  */
-console.log("[Strava Auto Kudos] Logger module loading");
+// console.log("[Strava Auto Kudos] Logger module loading");
 
 const Logger = {
     prefix: '[Strava Auto Kudos]',
@@ -39,17 +39,9 @@ const Logger = {
     }
 };
 
-// Ajoutez cette fonction au module Logger
-if (typeof Logger !== 'undefined') {
-    Logger.init = function() {
-        console.log("[Strava Auto Kudos] Logger initialized successfully");
-    };
-    
-    // Appelez immédiatement la fonction d'initialisation
-    Logger.init();
-} else {
-    console.error("[Strava Auto Kudos] Logger module undefined!");
-}
+// Initialisation automatique du Logger au chargement du script
+Logger.init();
+// console.log("[Strava Auto Kudos] Logger initialized successfully");
 
 // Exporter le module de logging
 if (typeof module !== 'undefined') {

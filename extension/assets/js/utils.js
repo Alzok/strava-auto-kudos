@@ -1,7 +1,7 @@
 /**
  * Module contenant des fonctions utilitaires
  */
-console.log("[Strava Auto Kudos] Utils module loading");
+// console.log("[Strava Auto Kudos] Utils module loading");
 
 const Utils = {
     /**
@@ -60,9 +60,9 @@ const Utils = {
 
 // Vérifions si le module est correctement défini
 if (typeof Utils !== 'undefined') {
-    console.log("[Strava Auto Kudos] Utils module loaded successfully");
+    // console.log("[Strava Auto Kudos] Utils module loaded successfully");
 } else {
-    console.error("[Strava Auto Kudos] Utils module not properly defined!");
+    // console.error("[Strava Auto Kudos] Utils module not properly defined!");
 }
 
 // Exporter le module d'utilitaires

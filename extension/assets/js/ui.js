@@ -1,25 +1,25 @@
 /**
  * Module pour la gestion de l'interface utilisateur
  */
-console.log("[Strava Auto Kudos] UI module loading");
+// console.log("[Strava Auto Kudos] UI module loading");
 
 const UI = {
     /**
      * Crée la bulle d'assistance flottante dans l'interface
      */
     createBulle: () => {
-        console.log("[Strava Auto Kudos] Creating UI bubble");
+        // console.log("[Strava Auto Kudos] Creating UI bubble");
         try {
-            // Supprimer tous les conteneurs existants pour éviter les duplications
-            const existingContainers = document.querySelectorAll('#strava-auto-kudos-container');
-            existingContainers.forEach(container => {
-                console.log("[Strava Auto Kudos] Removing existing container to avoid duplication");
-                container.remove();
-            });
+            // Vérifier si un conteneur existe déjà et le supprimer si oui
+            const existingContainer = document.getElementById('strava-auto-kudos-container');
+            if (existingContainer) {
+                // console.log("[Strava Auto Kudos] Removing existing container to avoid duplication");
+                existingContainer.remove();
+            }
             
-            // Réinitialiser le compteur de kudos pour la session actuelle
-            CONFIG.state.kudosCount = 0;
-            console.log("[Strava Auto Kudos] Reset kudos count to 0 for current session");
+            // Réinitialiser le compteur au cas où il resterait d'une session précédente
+            // console.log("[Strava Auto Kudos] Reset kudos count to 0 for current session");
+            // CONFIG.state.kudosCount = 0; // Assurez-vous que cela est géré dans App.init ou ailleurs de manière centralisée
             
             // Vérifier que le body existe
             if (!document.body) {
@@ -65,11 +65,11 @@ const UI = {
             
             // Ajouter l'événement de clic pour activer/désactiver
             bulle.addEventListener('click', () => {
-                console.log("[Strava Auto Kudos] Bubble clicked, toggling auto kudos");
+                // console.log("[Strava Auto Kudos] Bubble clicked, toggling auto kudos");
                 
                 // Si en pause temporaire à cause d'un rate limit, ne pas permettre l'activation
                 if (CONFIG.state.pauseUntil > Date.now() && CONFIG.state.errorCount > 5) {
-                    console.log("[Strava Auto Kudos] Extension en pause forcée, impossible d'activer");
+                    // console.log("[Strava Auto Kudos] Extension en pause forcée, impossible d'activer");
                     // Rappeler à l'utilisateur pourquoi l'extension est en pause
                     UI.showLimitExceededAlert();
                     return;
@@ -89,7 +89,7 @@ const UI = {
             const counter = document.createElement('div');
             counter.className = CONFIG.classes.counter;
             counter.textContent = CONFIG.state.kudosCount;
-            console.log("[Strava Auto Kudos] New counter created with value:", CONFIG.state.kudosCount);
+            // console.log("[Strava Auto Kudos] New counter created with value:", CONFIG.state.kudosCount);
             
             // Créer une zone pour les notifications flottantes
             const notifArea = document.createElement('div');
@@ -108,7 +108,7 @@ const UI = {
                 UI.showCountdownTimer(pauseUntil);
             }
             
-            console.log("[Strava Auto Kudos] UI bubble created successfully and added to DOM");
+            // console.log("[Strava Auto Kudos] UI bubble created successfully and added to DOM");
             
             return bulle;
         } catch (error) {
@@ -137,7 +137,7 @@ const UI = {
         let bulle = document.querySelector(`#strava-auto-kudos-bubble`);
         
         if (!bulle) {
-            console.log('[Strava Auto Kudos] No bubble found, creating a new one');
+            // console.log('[Strava Auto Kudos] No bubble found, creating a new one');
             bulle = UI.createBulle();
         }
         
@@ -149,7 +149,7 @@ const UI = {
      * @param {boolean} enabled - État d'activation
      */
     updateBulleStatus: (enabled) => {
-        console.log(`[Strava Auto Kudos] Updating UI bubble status: ${enabled ? 'enabled' : 'disabled'}`);
+        // console.log(`[Strava Auto Kudos] Updating UI bubble status: ${enabled ? 'enabled' : 'disabled'}`);
         try {
             const bulle = UI.ensureBulleExists();
             
@@ -195,6 +195,7 @@ const UI = {
             const container = document.getElementById('strava-auto-kudos-container');
             if (container) {
                 container.appendChild(counter);
+                // console.log('[Strava Auto Kudos] New counter created:', newCounter);
             }
         }
         
@@ -209,15 +210,15 @@ const UI = {
             // Incrémenter le compteur pour cette session uniquement
             CONFIG.state.kudosCount += 1;
             
-            console.log(`[Strava Auto Kudos] Incrementing kudos counter to:`, CONFIG.state.kudosCount);
+            // console.log(`[Strava Auto Kudos] Incrementing kudos counter to:`, CONFIG.state.kudosCount);
             
             // CORRECTION: Problème identifié - le sélecteur CSS ne correspond pas exactement
             // Vérifier le sélecteur exact et afficher le compteur trouvé
             const allCounters = document.querySelectorAll('#strava-auto-kudos-container > div');
-            console.log('[Strava Auto Kudos] All child divs in container:', allCounters.length);
+            // console.log('[Strava Auto Kudos] All child divs in container:', allCounters.length);
             
             const counter = document.querySelector(`#strava-auto-kudos-container .${CONFIG.classes.counter}`);
-            console.log('[Strava Auto Kudos] Counter element found?', counter ? 'Yes' : 'No', counter);
+            // console.log('[Strava Auto Kudos] Counter element found?', counter ? 'Yes' : 'No', counter);
             
             if (counter) {
                 // Forcer l'affichage de la nouvelle valeur
@@ -237,31 +238,14 @@ const UI = {
                     counter.style.transform = 'scale(1)';
                 }, 200);
                 
-                console.log('[Strava Auto Kudos] Counter UI updated to:', displayValue);
+                // console.log('[Strava Auto Kudos] Counter UI updated to:', displayValue);
             } else {
-                console.error('[Strava Auto Kudos] Counter element not found, recreating counter');
-                
-                // CORRECTION: Créer un nouveau compteur si non trouvé au lieu de recréer toute la bulle
-                const container = document.getElementById('strava-auto-kudos-container');
-                if (container) {
-                    const newCounter = document.createElement('div');
-                    newCounter.className = CONFIG.classes.counter;
-                    newCounter.textContent = CONFIG.state.kudosCount;
-                    newCounter.style.display = 'block';
-                    
-                    // Ajouter en position correcte (avant la bulle qui est le dernier élément)
-                    const bulle = document.querySelector('#strava-auto-kudos-bubble');
-                    if (bulle && bulle.parentNode === container) {
-                        container.insertBefore(newCounter, bulle);
-                    } else {
-                        container.appendChild(newCounter);
-                    }
-                    
-                    console.log('[Strava Auto Kudos] New counter created:', newCounter);
-                }
+                // Si le compteur n'existe pas, le créer
+                // console.log('[Strava Auto Kudos] Counter not found, creating it.');
+                UI.updateKudosCounter(); // Crée le compteur s'il n'existe pas
             }
         } catch (error) {
-            console.error('[Strava Auto Kudos] Error incrementing kudos count:', error);
+            // console.error('[Strava Auto Kudos] Error incrementing kudos count:', error);
         }
     },
     
@@ -271,7 +255,7 @@ const UI = {
      */
     createKudosAnimation: (element) => {
         try {
-            console.log('[Strava Auto Kudos] Creating kudos animation, element provided:', !!element);
+            // console.log('[Strava Auto Kudos] Creating kudos animation, element provided:', !!element);
             
             // CORRECTION: Forcer la création de plusieurs animations pour plus de visibilité
             const notificationsCount = 2; // Toujours créer 2 animations
@@ -284,12 +268,12 @@ const UI = {
                     const rect = element.getBoundingClientRect();
                     startX = rect.left + rect.width / 2;
                     startY = rect.top;
-                    console.log('[Strava Auto Kudos] Animation start from kudos button:', startX, startY);
+                    // console.log('[Strava Auto Kudos] Animation start from kudos button:', startX, startY);
                 } else {
                     // CORRECTION: Position de départ fixe depuis le centre inférieur de l'écran
                     startX = window.innerWidth / 2;
                     startY = window.innerHeight - 100;
-                    console.log('[Strava Auto Kudos] Animation start from fixed position:', startX, startY);
+                    // console.log('[Strava Auto Kudos] Animation start from fixed position:', startX, startY);
                 }
                 
                 // CORRECTION: Variation plus importante pour mieux voir les animations multiples
@@ -331,7 +315,7 @@ const UI = {
                     document.body.appendChild(notification);
                 }
                 
-                console.log(`[Strava Auto Kudos] Animation ${i+1} element created:`, notification);
+                // console.log(`[Strava Auto Kudos] Animation ${i+1} element created:`, notification);
                 
                 // CORRECTION: Animation avec requestAnimationFrame pour fiabilité maximale
                 const startTime = Date.now();
@@ -354,7 +338,7 @@ const UI = {
                         // Nettoyer à la fin
                         if (notification.parentNode) {
                             notification.parentNode.removeChild(notification);
-                            console.log(`[Strava Auto Kudos] Animation ${i+1} removed`);
+                            // console.log(`[Strava Auto Kudos] Animation ${i+1} removed`);
                         }
                     }
                 };

@@ -1,7 +1,7 @@
 /**
  * Module pour la gestion du stockage local
  */
-console.log("[Strava Auto Kudos] Storage module loading");
+// console.log("[Strava Auto Kudos] Storage module loading");
 
 const Storage = {
     /**
@@ -22,10 +22,10 @@ const Storage = {
             if (savedValue !== expectedValue) {
                 console.warn('[Strava Auto Kudos] Storage verification failed. Expected:', expectedValue, 'Got:', savedValue);
             } else {
-                console.log('[Strava Auto Kudos] Storage saved successfully:', key, '=', value);
+                // console.log('[Strava Auto Kudos] Storage saved successfully:', key, '=', value);
             }
         } catch (error) {
-            console.error('[Strava Auto Kudos] Error saving to storage:', error);
+            console.error(`[Strava Auto Kudos] Error saving to localStorage (key: ${key}):`, error);
         }
     },
     
@@ -76,12 +76,15 @@ const Storage = {
 
 // Vérifions si le module est correctement défini
 if (typeof Storage !== 'undefined') {
-    console.log("[Strava Auto Kudos] Storage module loaded successfully");
+    // console.log("[Strava Auto Kudos] Storage module loaded successfully");
 } else {
-    console.error("[Strava Auto Kudos] Storage module not properly defined!");
+    // console.error("[Strava Auto Kudos] Storage module not properly defined!");
 }
 
 // Exporter le module de stockage
 if (typeof module !== 'undefined') {
     module.exports = Storage;
+    // console.log("[Strava Auto Kudos] Storage module loaded successfully");
+} else {
+    // console.log("[Strava Auto Kudos] Storage module loaded successfully (browser)");
 }

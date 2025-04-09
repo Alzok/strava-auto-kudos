@@ -1,7 +1,7 @@
 /**
  * Configuration globale pour les paramètres ajustables
  */
-console.log("[Strava Auto Kudos] Config module loading");
+// console.log("[Strava Auto Kudos] Config module loading");
 const CONFIG = {
     // Délai entre les kudos (en ms)
     kudosDelay: {
